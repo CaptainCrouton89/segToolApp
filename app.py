@@ -180,33 +180,20 @@ class App():
 
     def _change_frame(self):
         image_load = self.all_images[self.index]
-
         self.persp_image.set_image(image_load)
-
         self.name.config(text=self.persp_image.image_load.path)
-
         self.refresh()
-
 
     def refresh(self):
         self.persp_image.clear_all()
         self.persp_image.image_load.refresh()
         self.persp_image.refresh()
 
-        # if not self.seg_image.image_load.refresh():
-        #     self._next_frame()
-        # else:
-        #     self.persp_image.refresh()
-        #     self.seg_image.refresh()
-
     def set_dims(self, event=None):
         self.persp_image.image_load.x_cells = int(self.pv_width.get())
         self.persp_image.image_load.y_cells = int(self.pv_height.get())
         if self.verbosity > 1:
             print("width:", self.pv_width.get(), "\nheight:", self.pv_height.get())
-
-        # Testing
-        # self.seg_image.image_load.calculate_lines()
         self.refresh()
 
 
@@ -297,7 +284,6 @@ class ImageLoad():
             if self.verbosity > 0:
                 print("Bad Image")
             self.skip = True
-            # seg_img = cv2.imread(default_image)
         else:
             self.skip = False
             self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
@@ -443,20 +429,6 @@ class PerspectiveView(InteractiveCanvas):
     def refresh(self):
         self.canvas.itemconfig(self.image, image = self.image_load.tk_image)
         self.draw_points(*self.image_load.adjusted_corners)
-
-
-class SegmentView(InteractiveCanvas):
-    def __init__(self, master, verbosity=0):
-        super().__init__(master, verbosity)
-
-    def refresh(self):
-        self.canvas.itemconfig(self.image, image=self.image_load.tk_transform_image)
-
-    def clear_all(self):
-        pass
-
-    def rotate(self, direction):
-        pass
 
 
 def get_midpoints(pt1, pt2, splits):
