@@ -46,8 +46,8 @@ class App():
 
         self.root.bind('<b>', self.load_images)
 
+    def run(self):
         self.root.mainloop()
-        
         self.refresh()
 
     def draw_window(self, name):
@@ -144,11 +144,14 @@ class App():
         self.seg_frame = Frame(editor_frame, width=100, height=100, borderwidth=5, relief="ridge")
         self.seg_frame.grid(row=1, column=1, sticky="nsew")
         
+        padx = 2
+        pady = 2
+        
         self.persp_image = PerspectiveView(self, self.persp_frame)
-        self.persp_image.canvas.pack(side=LEFT, fill="both", expand=True)
+        self.persp_image.canvas.pack(side=LEFT, fill="both", expand=True, padx=padx, pady=pady)
 
         self.seg_image = SegmentView(self, self.seg_frame)
-        self.seg_image.canvas.pack(side=LEFT, fill="both", expand=True)
+        self.seg_image.canvas.pack(side=LEFT, fill="both", expand=True, padx=padx, pady=pady)
 
     def load_images(self, event=None):
         w, h = self.persp_frame.winfo_width(), self.persp_frame.winfo_height()
@@ -163,7 +166,7 @@ class App():
         for filename in os.listdir(folder):
             if filename.endswith(".jpg") or filename.endswith(".png"):
                 filepath = str(in_path / filename)
-                self.all_images.append(ImageLoad(filepath, resize=(w-8, h-8), verbosity=self.verbosity))
+                self.all_images.append(ImageLoad(filepath, resize=(w-10, h-10), verbosity=self.verbosity))
         print([i.path for i in self.all_images])
         
         self._next_frame()
@@ -318,29 +321,52 @@ class ImageLoad():
             if self.verbosity > 0:
                 print("Bad Image")
             self.skip = True
-            img = cv2.imread(default_image)
+            seg_img = cv2.imread(default_image)
         else:
             self.skip = False
             self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
             self.calculate_lines()
-            img = self.cv_warp_image.copy()
-            self.apply_grid(img, self.vert_lines[0], reversed(self.vert_lines[1]))
-            self.apply_grid(img, self.hor_lines[0], reversed(self.hor_lines[1]))
-            self.untransform()
+            self.untransform_lines()
+            seg_img = self.cv_warp_image.copy()
+            persp_img = self.cv_image.copy()
 
+            # Adding lines to seg_img
+            self.apply_grid(seg_img, self.vert_lines[0], reversed(self.vert_lines[1]))
+            self.apply_grid(seg_img, self.hor_lines[0], reversed(self.hor_lines[1]))
+            # Adding lines to persp_img
+            self.apply_grid(persp_img, self.warp_vert_lines[0], reversed(self.warp_vert_lines[1]))
+            self.apply_grid(persp_img, self.warp_hor_lines[0], reversed(self.warp_hor_lines[1]))
 
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(img)
-        self.pil_transform_image = img.resize(self.resize)
+        # Converting seg_img
+        seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGR2RGB)
+        seg_img = Image.fromarray(seg_img)
+        self.pil_transform_image = seg_img.resize(self.resize)
         self.tk_transform_image = ImageTk.PhotoImage(self.pil_transform_image)
+        # Converting persp_img
+        persp_img = cv2.cvtColor(persp_img, cv2.COLOR_BGR2RGB)
+        persp_img = Image.fromarray(persp_img)
+        self.pil_image = persp_img.resize(self.resize)
+        self.tk_image = ImageTk.PhotoImage(self.pil_image)
+        print(self.tk_image)
         return True
 
-    def untransform(self):
-        print(self.trans_matrix)
-        inv_trans = np.linalg.pinv(self.trans_matrix)
-        print(inv_trans)
-        round_tripped = cv2.warpPerspective(self.cv_warp_image, inv_trans, (self.width, self.height))
+    def untransform_lines(self):
+        # Test code—this works. The output has chopped off everything outside the transform
+        # inv_trans = np.linalg.pinv(self.trans_matrix)
+        # round_tripped = cv2.warpPerspective(self.cv_warp_image, inv_trans, (self.width, self.height))
         # show(round_tripped)
+        inv_trans = np.linalg.pinv(self.trans_matrix)
+        self.warp_vert_lines = []
+        self.warp_hor_lines = []
+        for line in self.vert_lines:
+            self.warp_vert_lines.append([self.transform_point(p, inv_trans) for p in line])
+        for line in self.hor_lines:
+            self.warp_hor_lines.append([self.transform_point(p, inv_trans) for p in line])
+
+    def transform_point(self, p, matrix):
+        px = (matrix[0][0]*p[0] + matrix[0][1]*p[1] + matrix[0][2]) / ((matrix[2][0]*p[0] + matrix[2][1]*p[1] + matrix[2][2]))
+        py = (matrix[1][0]*p[0] + matrix[1][1]*p[1] + matrix[1][2]) / ((matrix[2][0]*p[0] + matrix[2][1]*p[1] + matrix[2][2]))
+        return (int(px), int(py))
 
     def apply_grid(self, img, lines1, lines2):
         for pt1, pt2 in zip(lines1, lines2):
@@ -427,7 +453,6 @@ class PerspectiveView(InteractiveCanvas):
         for p in points:
             x, y = int(p[0]), int(p[1])
             self.indicators.append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='white'))
-        self.update_corners()
 
     def update_corners(self):
         if self.indicators:
@@ -437,7 +462,7 @@ class PerspectiveView(InteractiveCanvas):
                 corners.append([x1+self.radius, y1+self.radius])
             self.image_load.adjusted_corners = np.asarray(corners)
             self.image_load.refresh()
-            self.app.seg_image.refresh()
+            self.app.refresh()
 
     def deselect(self, event):
         super().deselect(event)
@@ -470,20 +495,6 @@ class SegmentView(InteractiveCanvas):
         pass
 
 
-class QFrame(ttk.Frame):
-    
-    def __init__(self, master, border=True, pack=False, grid=(0, 0), side=TOP, width=5):
-        if border:
-            super().__init__(master=master, width=10, height=10, borderwidth=width, relief="ridge")
-        else:
-            super().__init__(master=master, width=10, height=10)
-
-        if pack:
-            self.pack(side=side, expand=1, fill=BOTH)
-        else: 
-            self.grid(row=grid[0], column=grid[1], sticky=(N, S, E, W))
-
-
 def get_midpoints(pt1, pt2, splits):
     midpoints = []
     x1, y1 = pt1[0], pt1[1]
@@ -495,11 +506,6 @@ def get_midpoints(pt1, pt2, splits):
         midpoints.append((int(x), int(y)))
     return midpoints
 
-# def get_mid(c1, c2, d1, d2):
-#     if d2 == 0:
-#         return c1
-#     return c1 - ((d1*(c1 - c2))/d2)
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("-v", "--verbosity", action="count", default=0, help="Print intermediary steps")
@@ -507,6 +513,7 @@ def main():
     args = ap.parse_args()
 
     app = App("Segmentation Tools", verbosity=args.verbosity, in_folder=args.in_path)
+    app.run()
     
 
 if __name__ == '__main__':
