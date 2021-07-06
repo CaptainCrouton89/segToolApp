@@ -1,4 +1,7 @@
 from pathlib import Path
+from datetime import date
+import json
+from shapely.geometry import Polygon
 from PIL import Image, ImageTk
 from warpTools import four_point_transform, order_points
 import math
@@ -11,6 +14,7 @@ import os
 import cv2
 import numpy as np
 import argparse
+import cocoConfig
 
 CW = 90
 CCW = -90
@@ -36,6 +40,8 @@ class App():
         self.style.configure("BW.TLabel", foreground="black", background="white")
 
         self.root.bind('<Return>', self.set_dims)
+        self.root.bind('<c>', self.set_dims)
+        self.root.bind('<s>', self.switch_dims)
         self.root.bind('<r>', self.recalculate_corners)
         self.root.bind('<f>', self._next_frame)
         self.root.bind('<n>', self._next_frame)
@@ -43,8 +49,8 @@ class App():
         self.root.bind('<d>', self._prev_frame)
         self.root.bind('<p>', self._prev_frame)
         self.root.bind('<Left>', self._prev_frame)
-
         self.root.bind('<b>', self.load_images)
+        self.root.bind('<g>', self.save_to)
 
     def run(self):
         self.root.mainloop()
@@ -52,6 +58,7 @@ class App():
 
     def draw_window(self, name):
         root = Tk(name)
+        root.title("SolarPanelSegmentater-3000")
         
         self.all_images = []
 
@@ -80,7 +87,9 @@ class App():
     def _draw_header(self, content):
         header = ttk.Frame(master=content, padding=(3,3,3,3), width=600, height=50, borderwidth=5, relief="ridge")
         self.name = ttk.Label(master=header, text="NAME", style="BW.TLabel")
+        keybinds = ttk.Label(master=header, text="All buttons are bound to the key corresponding to their first letter", style="BW.TLabel")
         self.name.pack()
+        keybinds.pack()
         return header
 
     def _draw_nav(self, content):
@@ -114,16 +123,19 @@ class App():
         controls_frame = ttk.Frame(master=editor_frame)
         controls_frame.pack(side=TOP, fill="x", expand=True)
 
-        self.pv_width = ttk.Entry(master=controls_frame)
-        self.pv_height = ttk.Entry(master=controls_frame)
-        self.bt_setdim = ttk.Button(master=controls_frame, text="Set", command=self.set_dims)
+        self.pv_width = ttk.Entry(master=controls_frame, width=3)
+        self.pv_height = ttk.Entry(master=controls_frame, width=3)
+        self.bt_setdim = ttk.Button(master=controls_frame, text="Confirm Dimensions", command=self.set_dims)
+        self.bt_switchdim = ttk.Button(master=controls_frame, text="Switch", command=self.switch_dims)
+        bt_recal_corners = ttk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners)
+
         self.pv_width.insert(END, 10)
         self.pv_height.insert(END, 6)
+
         self.pv_width.pack(side=LEFT)
         self.pv_height.pack(side=LEFT)
         self.bt_setdim.pack(side=LEFT)
-
-        bt_recal_corners = ttk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners)
+        self.bt_switchdim.pack(side=LEFT)
         bt_recal_corners.pack(side=LEFT)
 
         self.draw_image_frames(editor_frame)
@@ -154,8 +166,47 @@ class App():
         
         self._next_frame()
 
-    def save_to(self):
-        folder = filedialog.askdirectory(initialdir=".")
+    def save_to(self, event=None):
+        # folder = filedialog.askdirectory(initialdir=".")
+        coco = cocoConfig.get_boiler()
+        datetime = str(date.today())
+        
+        id = 0
+        an_id = 0
+        for image_load in self.all_images:
+            if image_load.skip == False:
+                id += 1
+                coco["images"].append(
+                    {
+                        "id": id,
+                        "width": image_load.width,
+                        "height": image_load.height,
+                        "file_name": image_load.path,
+                        "license": coco["licenses"]["id"],
+                        "flickr_url": "",
+                        "coco_url": "",
+                        "date_captured": datetime,
+                    }
+                )
+                all_segmentations = image_load.get_bb()
+                for segmentation in all_segmentations:
+                    an_id += 1
+                    polygon = Polygon(segmentation)
+                    bbox = bounding_box(segmentation)
+                    coco["annotations"].append(
+                    {
+                        "id": an_id,
+                        "image_id": id,
+                        "category_id": coco["categories"][0]["id"],
+                        "segmentation": [[item for items in segmentation for item in items]],
+                        "area": polygon.area,
+                        "bbox": [bbox[0][0],bbox[0][0],bbox[1][0]-bbox[0][0],bbox[1][1]-bbox[0][1]],
+                        "iscrowd": 0
+                    }
+                )
+        f = open("output.json", "w+")
+        json.dump(coco, f)     
+
 
     def _next_frame(self, event=None):
         
@@ -196,6 +247,14 @@ class App():
             print("width:", self.pv_width.get(), "\nheight:", self.pv_height.get())
         self.refresh()
 
+    def switch_dims(self, event=None):
+        h = int(self.pv_height.get())
+        w = int(self.pv_width.get())
+        self.pv_width.delete(0, END)
+        self.pv_height.delete(0, END)
+        self.pv_width.insert(END, h)
+        self.pv_height.insert(END, w)
+        self.set_dims()
 
     def recalculate_corners(self, event=None):
         self.persp_image.clear_all()
@@ -205,7 +264,7 @@ class App():
 class ImageLoad():
 
     def __init__(self, path, resize, verbosity=0):
-        self.skip = False
+        self.skip = True
 
         self.verbosity = verbosity
         self.resize = resize
@@ -295,6 +354,8 @@ class ImageLoad():
             self.apply_grid(persp_img, vert_warp_lines[0], reversed(vert_warp_lines[1]))
             self.apply_grid(persp_img, hor_warp_lines[0], reversed(hor_warp_lines[1]))
 
+            self.vert_lines, self.hor_lines = vert_warp_lines, hor_warp_lines
+
         # Converting persp_img
         persp_img = cv2.cvtColor(persp_img, cv2.COLOR_BGR2RGB)
         persp_img = Image.fromarray(persp_img)
@@ -302,6 +363,39 @@ class ImageLoad():
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
         print(self.tk_image)
         return True
+
+    def get_bb(self):
+        v_lines1, v_lines2 = self.vert_lines[0], reversed(self.vert_lines[1])
+        h_lines1, h_lines2 = self.hor_lines[0], reversed(self.hor_lines[1])
+
+        v_lines = [(p1, p2) for p1, p2 in zip(v_lines1, v_lines2)]
+        h_lines = [(p1, p2) for p1, p2 in zip(h_lines1, h_lines2)]
+        print("v_lines:", v_lines)
+        print("H_lines:", h_lines)
+        
+        all_segmentations = []
+        for i in range(len(v_lines)-1):
+            for j in range(len(h_lines)-1):
+                # Get all points CCW
+                segmentation = []
+                segmentation.append(self._get_intersection(v_lines, h_lines, i, j))
+                segmentation.append(self._get_intersection(v_lines, h_lines, i+1, j))
+                segmentation.append(self._get_intersection(v_lines, h_lines, i+1, j+1))
+                segmentation.append(self._get_intersection(v_lines, h_lines, i, j+1))
+                all_segmentations.append(segmentation)
+        return all_segmentations
+
+    def _get_intersection(self, line1, line2, i, j):
+        return find_intersection(
+            line1[i][0][0], 
+            line1[i][0][1], 
+            line1[i][1][0],
+            line1[i][1][1],
+            line2[j][0][0],
+            line2[j][0][1],
+            line2[j][1][0],
+            line2[j][1][1],
+            )
 
     def untransform_lines(self, vert_lines, hor_lines):
         inv_trans = np.linalg.pinv(self.trans_matrix)

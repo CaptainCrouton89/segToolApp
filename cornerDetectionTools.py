@@ -11,13 +11,6 @@ def cluster_points(points, nclusters):
     compactness, _, centers = cv2.kmeans(points, nclusters, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
     return compactness, centers
 
-def find_intersection(x1,y1,x2,y2,x3,y3,x4,y4):
-        if ( (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4) ) == 0:
-            return False
-        px= ( (x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4) ) / ( (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4) ) 
-        py= ( (x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4) ) / ( (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4) )
-        return px, py
-
 def segment_lines(lines):
     slopes = get_slopes(lines)
     radian_slopes = [math.atan(slope) for slope in slopes]
