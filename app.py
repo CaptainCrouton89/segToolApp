@@ -109,30 +109,21 @@ class App():
 
     def _draw_editor(self, content):
         editor_frame = ttk.Frame(master=content, padding=(3,3,3,3), width=600, height=5, borderwidth=5, relief="ridge")
-
-        editor_frame.rowconfigure(1, weight=1)
-
-        editor_frame.columnconfigure(0, weight=1)
-        editor_frame.columnconfigure(1, weight=1)
-
         self.editor_frame = editor_frame
 
         controls_frame = ttk.Frame(master=editor_frame)
-        controls_frame.grid(row=0, column=0, columnspan=2)
+        controls_frame.pack(side=TOP, fill="x", expand=True)
 
-        entry_frame = ttk.Frame(master=controls_frame)
-        entry_frame.grid(row=0, column=0)
-
-        self.pv_width = ttk.Entry(master=entry_frame)
-        self.pv_height = ttk.Entry(master=entry_frame)
-        self.bt_setdim = ttk.Button(master=entry_frame, text="Set", command=self.set_dims)
+        self.pv_width = ttk.Entry(master=controls_frame)
+        self.pv_height = ttk.Entry(master=controls_frame)
+        self.bt_setdim = ttk.Button(master=controls_frame, text="Set", command=self.set_dims)
         self.pv_width.insert(END, 10)
         self.pv_height.insert(END, 6)
         self.pv_width.pack(side=LEFT)
         self.pv_height.pack(side=LEFT)
         self.bt_setdim.pack(side=LEFT)
 
-        bt_recal_corners = ttk.Button(entry_frame, text="Recalculate",command=self.recalculate_corners)
+        bt_recal_corners = ttk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners)
         bt_recal_corners.pack(side=LEFT)
 
         self.draw_image_frames(editor_frame)
@@ -140,18 +131,10 @@ class App():
 
     def draw_image_frames(self, editor_frame):
         self.persp_frame = Frame(editor_frame, width=100, height=100, borderwidth=5, relief="ridge")
-        self.persp_frame.grid(row=1, column=0, sticky="nsew")
-        self.seg_frame = Frame(editor_frame, width=100, height=100, borderwidth=5, relief="ridge")
-        self.seg_frame.grid(row=1, column=1, sticky="nsew")
-        
-        padx = 2
-        pady = 2
-        
-        self.persp_image = PerspectiveView(self, self.persp_frame)
-        self.persp_image.canvas.pack(side=LEFT, fill="both", expand=True, padx=padx, pady=pady)
+        self.persp_frame.pack(side=TOP, fill="both", expand=True)
 
-        self.seg_image = SegmentView(self, self.seg_frame)
-        self.seg_image.canvas.pack(side=LEFT, fill="both", expand=True, padx=padx, pady=pady)
+        self.persp_image = PerspectiveView(self, self.persp_frame)
+        self.persp_image.canvas.pack(side=LEFT, fill="both", expand=True, padx=2, pady=2)
 
     def load_images(self, event=None):
         w, h = self.persp_frame.winfo_width(), self.persp_frame.winfo_height()
@@ -199,7 +182,6 @@ class App():
         image_load = self.all_images[self.index]
 
         self.persp_image.set_image(image_load)
-        self.seg_image.set_image(image_load)
 
         self.name.config(text=self.persp_image.image_load.path)
 
@@ -208,10 +190,8 @@ class App():
 
     def refresh(self):
         self.persp_image.clear_all()
-        self.seg_image.clear_all()
-        self.seg_image.image_load.refresh()
+        self.persp_image.image_load.refresh()
         self.persp_image.refresh()
-        self.seg_image.refresh()
 
         # if not self.seg_image.image_load.refresh():
         #     self._next_frame()
@@ -253,9 +233,7 @@ class ImageLoad():
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
 
         self.cv_warp_image = None
-        self.cv_rotation_image = None
-        self.pil_transform_image = None
-        self.tk_transform_image = None
+
         self.width, self.height = self.o_pil_image.size
 
         # Persp shift vars
@@ -263,24 +241,20 @@ class ImageLoad():
         if (self.verbosity > 1):
             print("resize:", resize)
             print("resize factor:", self.resize_factor)
-
-        self.transform = []
-        self.rotation = None
     
         self.transform_resize_factor = None
 
         self.corners = np.array([])
         self.adjusted_corners = np.array([])
 
-        # Overlay lines on cv_warp
         self.vert_lines = []
         self.hor_lines = []
 
-    def calculate_lines(self):
-        self.vert_lines = []
-        self.hor_lines = []
+    def calculate_lines(self, img):
+        vert_lines = []
+        hor_lines = []
         # uses adjustad corners to calculate intermediaries
-        height, width, _ = self.cv_warp_image.shape
+        height, width, _ = img.shape
         ordered_pts = [
             [0, 0],
             [width, 0],
@@ -291,9 +265,11 @@ class ImageLoad():
         offset_pts.append(ordered_pts[:1][0])
         for i, (pt1, pt2) in enumerate(zip(offset_pts, ordered_pts)):
             if i % 2 == 0:
-                self.vert_lines.append(get_midpoints(pt1, pt2, self.x_cells))
+                vert_lines.append(get_midpoints(pt1, pt2, self.x_cells))
             else:
-                self.hor_lines.append(get_midpoints(pt1, pt2, self.y_cells))
+                hor_lines.append(get_midpoints(pt1, pt2, self.y_cells))
+
+        return vert_lines, hor_lines
 
     def auto_detect(self):
         if self.verbosity > 1:
@@ -321,27 +297,18 @@ class ImageLoad():
             if self.verbosity > 0:
                 print("Bad Image")
             self.skip = True
-            seg_img = cv2.imread(default_image)
+            # seg_img = cv2.imread(default_image)
         else:
             self.skip = False
             self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
-            self.calculate_lines()
-            self.untransform_lines()
-            seg_img = self.cv_warp_image.copy()
+            vert_lines, hor_lines = self.calculate_lines(self.cv_warp_image)
+            vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines)
             persp_img = self.cv_image.copy()
 
-            # Adding lines to seg_img
-            self.apply_grid(seg_img, self.vert_lines[0], reversed(self.vert_lines[1]))
-            self.apply_grid(seg_img, self.hor_lines[0], reversed(self.hor_lines[1]))
             # Adding lines to persp_img
-            self.apply_grid(persp_img, self.warp_vert_lines[0], reversed(self.warp_vert_lines[1]))
-            self.apply_grid(persp_img, self.warp_hor_lines[0], reversed(self.warp_hor_lines[1]))
+            self.apply_grid(persp_img, vert_warp_lines[0], reversed(vert_warp_lines[1]))
+            self.apply_grid(persp_img, hor_warp_lines[0], reversed(hor_warp_lines[1]))
 
-        # Converting seg_img
-        seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGR2RGB)
-        seg_img = Image.fromarray(seg_img)
-        self.pil_transform_image = seg_img.resize(self.resize)
-        self.tk_transform_image = ImageTk.PhotoImage(self.pil_transform_image)
         # Converting persp_img
         persp_img = cv2.cvtColor(persp_img, cv2.COLOR_BGR2RGB)
         persp_img = Image.fromarray(persp_img)
@@ -350,18 +317,15 @@ class ImageLoad():
         print(self.tk_image)
         return True
 
-    def untransform_lines(self):
-        # Test code—this works. The output has chopped off everything outside the transform
-        # inv_trans = np.linalg.pinv(self.trans_matrix)
-        # round_tripped = cv2.warpPerspective(self.cv_warp_image, inv_trans, (self.width, self.height))
-        # show(round_tripped)
+    def untransform_lines(self, vert_lines, hor_lines):
         inv_trans = np.linalg.pinv(self.trans_matrix)
-        self.warp_vert_lines = []
-        self.warp_hor_lines = []
-        for line in self.vert_lines:
-            self.warp_vert_lines.append([self.transform_point(p, inv_trans) for p in line])
-        for line in self.hor_lines:
-            self.warp_hor_lines.append([self.transform_point(p, inv_trans) for p in line])
+        vert_warp_lines = []
+        hor_warp_lines = []
+        for line in vert_lines:
+            vert_warp_lines.append([self.transform_point(p, inv_trans) for p in line])
+        for line in hor_lines:
+            hor_warp_lines.append([self.transform_point(p, inv_trans) for p in line])
+        return vert_warp_lines, hor_warp_lines
 
     def transform_point(self, p, matrix):
         px = (matrix[0][0]*p[0] + matrix[0][1]*p[1] + matrix[0][2]) / ((matrix[2][0]*p[0] + matrix[2][1]*p[1] + matrix[2][2]))
