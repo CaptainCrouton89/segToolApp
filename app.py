@@ -9,7 +9,8 @@ import cornerDetectionTools
 from rotationTools import smart_rotate
 from cvTools import *
 from tkinter import filedialog, Canvas, Frame
-from tkinter import ttk, Tk, BOTH, N, S, E, W, LEFT, TOP, BOTTOM, CURRENT, NW, NE, SW, SE, END
+from tkinter.messagebox import showinfo
+import tkinter as tk
 import os
 import cv2
 import numpy as np
@@ -31,17 +32,12 @@ class App():
     def __init__(self, name, verbosity=0, in_folder=None):
         self.default_in_folder = in_folder
 
-        self.verbosity = verbosity
-
-        
+        self.verbosity = verbosity        
 
         self.root = self.draw_window(name)
-        self.style = ttk.Style()
-        self.style.configure("BW.TLabel", foreground="black", background="white")
-
         self.root.bind('<Return>', self.set_dims)
         self.root.bind('<c>', self.set_dims)
-        self.root.bind('<s>', self.switch_dims)
+        self.root.bind('<w>', self.switch_dims)
         self.root.bind('<r>', self.recalculate_corners)
         self.root.bind('<f>', self._next_frame)
         self.root.bind('<n>', self._next_frame)
@@ -50,23 +46,20 @@ class App():
         self.root.bind('<p>', self._prev_frame)
         self.root.bind('<Left>', self._prev_frame)
         self.root.bind('<b>', self.load_images)
-        self.root.bind('<g>', self.save_to)
+        self.root.bind('<s>', self.save_to)
 
     def run(self):
         self.root.mainloop()
         self.refresh()
 
     def draw_window(self, name):
-        root = Tk(name)
+        root = tk.Tk(name)
         root.title("SolarPanelSegmentater-3000")
         
         self.all_images = []
 
-        self.style = ttk.Style()
-        self.style.configure("BW.TLabel", foreground="black", background="white")
-
-        content = ttk.Frame(master=root, padding=(3,3,3,3), borderwidth=5, relief="ridge")
-        content.pack(fill=BOTH, expand=1)
+        content = tk.Frame(master=root, padx=3, pady=3, borderwidth=5, relief="ridge")
+        content.pack(fill=tk.BOTH, expand=1)
 
         content.rowconfigure([0, 1, 2], minsize=50)
         content.columnconfigure([0], minsize=50)
@@ -75,25 +68,27 @@ class App():
         content.columnconfigure(0, weight=1)
 
         header = self._draw_header(content)
-        header.grid(row=0, column=0, sticky=(N, S, E, W))
+        header.grid(row=0, column=0, sticky=("nsew"))
 
         navbar = self._draw_nav(content)
-        navbar.grid(row=1, column=0, sticky=(N, S, E, W))
+        navbar.grid(row=1, column=0, sticky=("nsew"))
 
         editor_frame = self._draw_editor(content)
-        editor_frame.grid(row=2, column=0, sticky=(N, S, E, W))
+        editor_frame.grid(row=2, column=0, sticky=("nsew"))
         return root
 
     def _draw_header(self, content):
-        header = ttk.Frame(master=content, padding=(3,3,3,3), width=600, height=50, borderwidth=5, relief="ridge")
-        self.name = ttk.Label(master=header, text="NAME", style="BW.TLabel")
-        keybinds = ttk.Label(master=header, text="All buttons are bound to the key corresponding to their first letter", style="BW.TLabel")
+        header = tk.Frame(master=content, padx=3, pady=3, width=600, height=50, borderwidth=5, relief="ridge")
+        self.name = tk.Label(master=header, text="NAME", fg="black")
+        keybinds = tk.Label(master=header, text="All buttons are bound to the key corresponding to their first capital letter.", fg="black")
+        guide = tk.Label(master=header, text="Shift-Click to add point.", fg="black")
         self.name.pack()
         keybinds.pack()
+        guide.pack()
         return header
 
     def _draw_nav(self, content):
-        navbar = ttk.Frame(master=content, padding=(3,3,3,3), width=600, height=10, borderwidth=5, relief="ridge")
+        navbar = tk.Frame(master=content, padx=3, pady=3, width=600, height=10, borderwidth=5, relief="ridge")
 
         navbar.columnconfigure([0, 5], minsize=50)
         navbar.rowconfigure(0, weight=1)
@@ -106,47 +101,49 @@ class App():
         navbar.columnconfigure(5, weight=1)
 
 
-        bt_next = ttk.Button(navbar, text="NEXT", command=self._next_frame)
-        bt_next.grid(row=0, column=5, rowspan=2, sticky=(N, S, E, W))
+        bt_next = tk.Button(navbar, text="Next", command=self._next_frame, fg="black")
+        bt_next.grid(row=0, column=5, rowspan=2, sticky=("nsew"))
 
-        bt_prev = ttk.Button(navbar, text="PREVIOUS", command=self._prev_frame)
-        bt_prev.grid(row=0, column=0, rowspan=2, sticky=(N, S, E, W))
+        bt_prev = tk.Button(navbar, text="Previous", command=self._prev_frame, fg="black")
+        bt_prev.grid(row=0, column=0, rowspan=2, sticky=("nsew"))
 
-        bt_browse = ttk.Button(navbar,text="Browse",command=self.load_images, takefocus=False)
-        bt_browse.grid(row=0, column=2, columnspan=2, sticky=(N, S, E, W))
+        bt_browse = tk.Button(navbar,text="Browse",command=self.load_images, fg="black")
+        bt_browse.grid(row=0, column=2, columnspan=2, sticky=("nsew"))
         return navbar
 
     def _draw_editor(self, content):
-        editor_frame = ttk.Frame(master=content, padding=(3,3,3,3), width=600, height=5, borderwidth=5, relief="ridge")
+        editor_frame = tk.Frame(master=content, padx=3, pady=3, width=600, height=5, borderwidth=5, relief="ridge")
         self.editor_frame = editor_frame
 
-        controls_frame = ttk.Frame(master=editor_frame)
-        controls_frame.pack(side=TOP, fill="x", expand=True)
+        controls_frame = tk.Frame(master=editor_frame)
+        controls_frame.pack(side=tk.TOP, fill="x")
 
-        self.pv_width = ttk.Entry(master=controls_frame, width=3)
-        self.pv_height = ttk.Entry(master=controls_frame, width=3)
-        self.bt_setdim = ttk.Button(master=controls_frame, text="Confirm Dimensions", command=self.set_dims)
-        self.bt_switchdim = ttk.Button(master=controls_frame, text="Switch", command=self.switch_dims)
-        bt_recal_corners = ttk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners)
+        self.pv_width = tk.Entry(master=controls_frame, width=3, fg="black", bg="white")
+        self.pv_height = tk.Entry(master=controls_frame, width=3, fg="black", bg="white")
+        self.bt_setdim = tk.Button(master=controls_frame, text="Confirm dimensions", command=self.set_dims, fg="black")
+        self.bt_switchdim = tk.Button(master=controls_frame, text="sWitch dimensions", command=self.switch_dims, fg="black")
+        bt_recal_corners = tk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners, fg="black")
+        bt_save = tk.Button(controls_frame, text="Save",command=self.save_to, fg="black")
 
-        self.pv_width.insert(END, 10)
-        self.pv_height.insert(END, 6)
+        self.pv_width.insert(tk.END, 10)
+        self.pv_height.insert(tk.END, 6)
 
-        self.pv_width.pack(side=LEFT)
-        self.pv_height.pack(side=LEFT)
-        self.bt_setdim.pack(side=LEFT)
-        self.bt_switchdim.pack(side=LEFT)
-        bt_recal_corners.pack(side=LEFT)
+        self.pv_width.pack(side=tk.LEFT)
+        self.pv_height.pack(side=tk.LEFT)
+        self.bt_setdim.pack(side=tk.LEFT)
+        self.bt_switchdim.pack(side=tk.LEFT)
+        bt_recal_corners.pack(side=tk.LEFT)
+        bt_save.pack(side=tk.LEFT)
 
         self.draw_image_frames(editor_frame)
         return editor_frame
 
     def draw_image_frames(self, editor_frame):
-        self.persp_frame = Frame(editor_frame, width=100, height=100, borderwidth=5, relief="ridge")
-        self.persp_frame.pack(side=TOP, fill="both", expand=True)
+        self.persp_frame = Frame(editor_frame, width=100, height=100)
+        self.persp_frame.pack(side=tk.TOP, fill="both", expand=True)
 
         self.persp_image = PerspectiveView(self, self.persp_frame)
-        self.persp_image.canvas.pack(side=LEFT, fill="both", expand=True, padx=2, pady=2)
+        self.persp_image.canvas.pack(side=tk.LEFT, fill="both", expand=True, padx=2, pady=2)
 
     def load_images(self, event=None):
         w, h = self.persp_frame.winfo_width(), self.persp_frame.winfo_height()
@@ -154,15 +151,17 @@ class App():
         self.index = -1
 
         if not self.default_in_folder:
-            folder = filedialog.askdirectory(initialdir=".")
+            self.folder = filedialog.askdirectory(initialdir=".")
         else:
-            folder = self.default_in_folder
-        in_path = Path(folder)
-        for filename in os.listdir(folder):
+            self.folder = self.default_in_folder
+        in_path = Path(self.folder)
+        for filename in os.listdir(self.folder):
             if filename.endswith(".jpg") or filename.endswith(".png"):
                 filepath = str(in_path / filename)
                 self.all_images.append(ImageLoad(filepath, resize=(w-10, h-10), verbosity=self.verbosity))
-        print([i.path for i in self.all_images])
+        if self.verbosity > 0:
+            for i in self.all_images:
+                print(i.path)
         
         self._next_frame()
 
@@ -204,9 +203,9 @@ class App():
                         "iscrowd": 0
                     }
                 )
-        f = open("output.json", "w+")
-        json.dump(coco, f)     
-
+        path = str(Path(self.folder) / "annotations.json")
+        f = open(path, "w+")
+        json.dump(coco, f)
 
     def _next_frame(self, event=None):
         
@@ -216,6 +215,7 @@ class App():
             return
         self.index += 1
         if self.index >= len(self.all_images):
+            showinfo("End of folder", "You have reviewed all images in this folder. You may continue editing, or you may save and quit.")
             self.index = 0
         self._change_frame()
 
@@ -250,10 +250,10 @@ class App():
     def switch_dims(self, event=None):
         h = int(self.pv_height.get())
         w = int(self.pv_width.get())
-        self.pv_width.delete(0, END)
-        self.pv_height.delete(0, END)
-        self.pv_width.insert(END, h)
-        self.pv_height.insert(END, w)
+        self.pv_width.delete(0, tk.END)
+        self.pv_height.delete(0, tk.END)
+        self.pv_width.insert(tk.END, h)
+        self.pv_height.insert(tk.END, w)
         self.set_dims()
 
     def recalculate_corners(self, event=None):
@@ -343,6 +343,7 @@ class ImageLoad():
             if self.verbosity > 0:
                 print("Bad Image")
             self.skip = True
+            persp_img = self.cv_image
         else:
             self.skip = False
             self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
@@ -361,7 +362,6 @@ class ImageLoad():
         persp_img = Image.fromarray(persp_img)
         self.pil_image = persp_img.resize(self.resize)
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
-        print(self.tk_image)
         return True
 
     def get_bb(self):
@@ -370,8 +370,6 @@ class ImageLoad():
 
         v_lines = [(p1, p2) for p1, p2 in zip(v_lines1, v_lines2)]
         h_lines = [(p1, p2) for p1, p2 in zip(h_lines1, h_lines2)]
-        print("v_lines:", v_lines)
-        print("H_lines:", h_lines)
         
         all_segmentations = []
         for i in range(len(v_lines)-1):
@@ -441,7 +439,7 @@ class InteractiveCanvas():
         self.selected = None
 
         self.canvas = Canvas(master, width=500, height=500)
-        self.image = self.canvas.create_image(0, 0, anchor = NW, image=None)
+        self.image = self.canvas.create_image(0, 0, anchor = tk.NW, image=None)
 
         self.canvas.bind('<1>', self.select_circle)
         self.canvas.bind('<Shift-1>', self.make_circle)
@@ -467,7 +465,7 @@ class InteractiveCanvas():
         self.canvas.bind('<Motion>', self.move_circle)
         self.canvas.bind('<ButtonRelease-1>', self.deselect)
 
-        self.canvas.addtag_withtag('selected', CURRENT)
+        self.canvas.addtag_withtag('selected', tk.CURRENT)
 
     def move_circle(self, event):
         x, y, r = event.x, event.y, self.radius
