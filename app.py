@@ -276,6 +276,7 @@ class Segmentation():
         self.adjusted_corners = np.array([])
         self.vert_lines = []
         self.hor_lines = []
+        self.cv_warp_image = None
 
 
 class ImageLoad():
@@ -296,8 +297,6 @@ class ImageLoad():
         self.pil_image = self.o_pil_image.resize((resize[0], resize[1]))
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
 
-        self.cv_warp_image = None
-
         self.width, self.height = self.o_pil_image.size
 
         # Persp shift vars
@@ -306,8 +305,6 @@ class ImageLoad():
             print("resize:", resize)
             print("resize factor:", self.resize_factor)
     
-        self.transform_resize_factor = None
-
         self.segmentations = [Segmentation(), Segmentation()]
 
     def calculate_lines(self, img, segmentation):
@@ -342,7 +339,7 @@ class ImageLoad():
         global default_image
         # If points never set yet, will auto-calculate best guess
         seg = self.segmentations[0]
-        if self.corners.shape[0] == 0 and self.adjusted_corners.shape[0] == 0:
+        if seg.corners.shape[0] == 0 and seg.adjusted_corners.shape[0] == 0:
             seg.corners, seg.adjusted_corners = self.auto_detect()
         
         if seg.adjusted_corners.shape[0] != 0:
@@ -364,8 +361,8 @@ class ImageLoad():
                 persp_img = self.cv_image
             else:
                 self.skip = False
-                self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
-                vert_lines, hor_lines = self.calculate_lines(self.cv_warp_image, seg)
+                seg.cv_warp_image, seg.trans_matrix = four_point_transform(self.cv_image, seg.corners)
+                vert_lines, hor_lines = self.calculate_lines(seg.cv_warp_image, seg)
                 vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines)
                 # Adding lines to persp_img
                 self.apply_grid(persp_img, vert_warp_lines[0], reversed(vert_warp_lines[1]))
@@ -514,11 +511,12 @@ class PerspectiveView(InteractiveCanvas):
 
     def update_corners(self):
         if self.indicators:
-            corners = []
-            for widget in self.indicators:
-                x1, y1, _, _ = self.canvas.coords(widget)
-                corners.append([x1+self.radius, y1+self.radius])
-            self.image_load.adjusted_corners = np.asarray(corners)
+            for seg in self.image_load.segmentations:
+                corners = []
+                for widget in self.indicators:
+                    x1, y1, _, _ = self.canvas.coords(widget)
+                    corners.append([x1+self.radius, y1+self.radius])
+                seg.adjusted_corners = np.asarray(corners)
             self.image_load.refresh()
             self.app.refresh()
 
@@ -536,7 +534,8 @@ class PerspectiveView(InteractiveCanvas):
 
     def refresh(self):
         self.canvas.itemconfig(self.image, image = self.image_load.tk_image)
-        self.draw_points(*self.image_load.adjusted_corners)
+        for seg in self.image_load.segmentations:
+            self.draw_points(*seg.adjusted_corners)
 
 
 def get_midpoints(pt1, pt2, splits):
