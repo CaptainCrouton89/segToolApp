@@ -38,15 +38,16 @@ class App():
         self.root.bind('<Return>', self.set_dims)
         self.root.bind('<c>', self.set_dims)
         self.root.bind('<w>', self.switch_dims)
-        self.root.bind('<r>', self.recalculate_corners)
+        self.root.bind('<Command-r>', self.recalculate_corners)
         self.root.bind('<f>', self._next_frame)
         self.root.bind('<n>', self._next_frame)
         self.root.bind('<Right>', self._next_frame)
         self.root.bind('<d>', self._prev_frame)
         self.root.bind('<p>', self._prev_frame)
         self.root.bind('<Left>', self._prev_frame)
-        self.root.bind('<b>', self.load_images)
-        self.root.bind('<s>', self.save_to)
+        self.root.bind('<Command-b>', self.load_images)
+        self.root.bind('<Command-s>', self.save_to)
+        self.root.bind('<Shift-s>', self.skip)
 
     def run(self):
         self.root.mainloop()
@@ -239,6 +240,10 @@ class App():
         self.persp_image.clear_all()
         self.persp_image.image_load.refresh()
         self.persp_image.refresh()
+
+    def skip(self, event=None):
+        self.persp_image.image_load.skip = True
+        self._next_frame()
 
     def set_dims(self, event=None):
         self.persp_image.image_load.x_cells = int(self.pv_width.get())

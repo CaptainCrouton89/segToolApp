@@ -108,7 +108,11 @@ def find_corners(img, verbosity=0, debug=0):
 
     contours, _ = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    
+    try:
+        if not lines:
+            return np.array([])
+    except:
+        pass
     all_lines = segment_lines(lines)
 
     if debug > 0:
@@ -146,7 +150,10 @@ def find_corners(img, verbosity=0, debug=0):
         show(intersectsimg, "centers")
 
     P = np.float32(np.column_stack((Px, Py)))
-    compactness, centers = cluster_points(P, 4)
+    try:
+        compactness, centers = cluster_points(P, 4)
+    except:
+        return np.array([])
     
     if compactness > 10000000:
         if len(contours) == 0:
