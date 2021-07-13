@@ -266,6 +266,18 @@ class App():
         self.persp_image.image_load.auto_detect()
         self.refresh()
 
+
+class Segmentation():
+
+    def __init__(self):
+        self.x_cells = 10
+        self.y_cells = 6
+        self.corners = np.array([])
+        self.adjusted_corners = np.array([])
+        self.vert_lines = []
+        self.hor_lines = []
+
+
 class ImageLoad():
 
     def __init__(self, path, resize, verbosity=0):
@@ -274,8 +286,9 @@ class ImageLoad():
         self.verbosity = verbosity
         self.resize = resize
 
-        self.x_cells = 10
-        self.y_cells = 6
+        # Should be multiple
+        self.x_cells = 6
+        self.y_cells = 10
 
         self.path = path
         self.cv_image = cv2.imread(path)
@@ -295,13 +308,9 @@ class ImageLoad():
     
         self.transform_resize_factor = None
 
-        self.corners = np.array([])
-        self.adjusted_corners = np.array([])
+        self.segmentations = [Segmentation(), Segmentation()]
 
-        self.vert_lines = []
-        self.hor_lines = []
-
-    def calculate_lines(self, img):
+    def calculate_lines(self, img, segmentation):
         vert_lines = []
         hor_lines = []
         # uses adjustad corners to calculate intermediaries
@@ -316,51 +325,53 @@ class ImageLoad():
         offset_pts.append(ordered_pts[:1][0])
         for i, (pt1, pt2) in enumerate(zip(offset_pts, ordered_pts)):
             if i % 2 == 0:
-                vert_lines.append(get_midpoints(pt1, pt2, self.x_cells))
+                vert_lines.append(get_midpoints(pt1, pt2, segmentation.x_cells))
             else:
-                hor_lines.append(get_midpoints(pt1, pt2, self.y_cells))
+                hor_lines.append(get_midpoints(pt1, pt2, segmentation.y_cells))
 
         return vert_lines, hor_lines
 
     def auto_detect(self):
         if self.verbosity > 1:
             print("auto-detecting corners")
-        self.corners = cornerDetectionTools.find_corners(self.cv_image)
-        self.adjusted_corners = self.convert_points_forward(*self.corners)
+        corners = cornerDetectionTools.find_corners(self.cv_image)
+        adjusted_corners = self.convert_points_forward(*corners)
+        return corners, adjusted_corners
 
     def refresh(self):
         global default_image
         # If points never set yet, will auto-calculate best guess
+        seg = self.segmentations[0]
         if self.corners.shape[0] == 0 and self.adjusted_corners.shape[0] == 0:
-            self.auto_detect()
+            seg.corners, seg.adjusted_corners = self.auto_detect()
         
-        if self.adjusted_corners.shape[0] != 0:
+        if seg.adjusted_corners.shape[0] != 0:
             if self.verbosity > 1:
                 print("loading corners from save")
-            self.corners = self.convert_backward(*self.adjusted_corners)
+            seg.corners = self.convert_backward(*seg.adjusted_corners)
             # self.adjusted_corners = self.convert_points_forward(*self.corners)
 
         if self.verbosity > 1:
-            print("adjusted corners:", self.adjusted_corners)
-            print("corners to warp on:", self.corners)
+            print("adjusted corners:", seg.adjusted_corners)
+            print("corners to warp on:", seg.corners)
 
-        if self.corners.shape[0] != 4:
-            if self.verbosity > 0:
-                print("Bad Image")
-            self.skip = True
-            persp_img = self.cv_image
-        else:
-            self.skip = False
-            self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
-            vert_lines, hor_lines = self.calculate_lines(self.cv_warp_image)
-            vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines)
-            persp_img = self.cv_image.copy()
+        persp_img = self.cv_image.copy()
+        for seg in self.segmentations:
+            if seg.corners.shape[0] % 4 != 0:
+                if self.verbosity > 0:
+                    print("Bad Image")
+                self.skip = True
+                persp_img = self.cv_image
+            else:
+                self.skip = False
+                self.cv_warp_image, self.trans_matrix = four_point_transform(self.cv_image, self.corners)
+                vert_lines, hor_lines = self.calculate_lines(self.cv_warp_image, seg)
+                vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines)
+                # Adding lines to persp_img
+                self.apply_grid(persp_img, vert_warp_lines[0], reversed(vert_warp_lines[1]))
+                self.apply_grid(persp_img, hor_warp_lines[0], reversed(hor_warp_lines[1]))
 
-            # Adding lines to persp_img
-            self.apply_grid(persp_img, vert_warp_lines[0], reversed(vert_warp_lines[1]))
-            self.apply_grid(persp_img, hor_warp_lines[0], reversed(hor_warp_lines[1]))
-
-            self.vert_lines, self.hor_lines = vert_warp_lines, hor_warp_lines
+                seg.vert_lines, seg.hor_lines = vert_warp_lines, hor_warp_lines
 
         # Converting persp_img
         persp_img = cv2.cvtColor(persp_img, cv2.COLOR_BGR2RGB)
