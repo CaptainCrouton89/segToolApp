@@ -11,13 +11,6 @@ def cluster_points(points, nclusters):
     compactness, _, centers = cv2.kmeans(points, nclusters, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
     return compactness, centers
 
-def find_intersection(x1,y1,x2,y2,x3,y3,x4,y4):
-        if ( (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4) ) == 0:
-            return False
-        px= ( (x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4) ) / ( (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4) ) 
-        py= ( (x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4) ) / ( (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4) )
-        return px, py
-
 def segment_lines(lines):
     slopes = get_slopes(lines)
     radian_slopes = [math.atan(slope) for slope in slopes]
@@ -115,7 +108,11 @@ def find_corners(img, verbosity=0, debug=0):
 
     contours, _ = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    
+    try:
+        if not lines:
+            return np.array([])
+    except:
+        pass
     all_lines = segment_lines(lines)
 
     if debug > 0:
@@ -153,7 +150,10 @@ def find_corners(img, verbosity=0, debug=0):
         show(intersectsimg, "centers")
 
     P = np.float32(np.column_stack((Px, Py)))
-    compactness, centers = cluster_points(P, 4)
+    try:
+        compactness, centers = cluster_points(P, 4)
+    except:
+        return np.array([])
     
     if compactness > 10000000:
         if len(contours) == 0:
