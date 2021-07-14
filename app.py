@@ -277,6 +277,7 @@ class Segmentation():
         self.vert_lines = []
         self.hor_lines = []
         self.cv_warp_image = None
+        self.trans_matrix = None
 
 
 class ImageLoad():
@@ -305,7 +306,7 @@ class ImageLoad():
             print("resize:", resize)
             print("resize factor:", self.resize_factor)
     
-        self.segmentations = [Segmentation(), Segmentation()]
+        self.segmentations = [Segmentation()]
 
     def calculate_lines(self, img, segmentation):
         vert_lines = []
@@ -363,7 +364,7 @@ class ImageLoad():
                 self.skip = False
                 seg.cv_warp_image, seg.trans_matrix = four_point_transform(self.cv_image, seg.corners)
                 vert_lines, hor_lines = self.calculate_lines(seg.cv_warp_image, seg)
-                vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines)
+                vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines, seg)
                 # Adding lines to persp_img
                 self.apply_grid(persp_img, vert_warp_lines[0], reversed(vert_warp_lines[1]))
                 self.apply_grid(persp_img, hor_warp_lines[0], reversed(hor_warp_lines[1]))
@@ -408,8 +409,8 @@ class ImageLoad():
             line2[j][1][1],
             )
 
-    def untransform_lines(self, vert_lines, hor_lines):
-        inv_trans = np.linalg.pinv(self.trans_matrix)
+    def untransform_lines(self, vert_lines, hor_lines, seg):
+        inv_trans = np.linalg.pinv(seg.trans_matrix)
         vert_warp_lines = []
         hor_warp_lines = []
         for line in vert_lines:
