@@ -22,6 +22,29 @@ CCW = -90
 
 default_image = "assets/default_img.png"
 
+keybinds = "\n\
+    \n\tFILE MANIPULATION ******************\t\
+    \n\
+    \n\tOpen directory          <Control-o> \
+    \n\tSave annotations        <Control-s> \
+    \n\
+    \n\
+    \n\tNAVIGATING BETWEEN FRAMES **********\t\
+    \n\
+    \n\tNext frame              <f>, <Right> \
+    \n\tPrevious frame          <d>, <Left> \
+    \n\tSkip frame              <Shift-k> \
+    \n\
+    \n\
+    \n\tSEGMENTATION ***********************\t\
+    \n\
+    \n\tReset                   <Control-r> \
+    \n\tSet dimensions          <Return> \
+    \n\tSwitch dimensions       <x> \
+    \n\tNew segmentation        <Shift-n> \
+    \n\tSwitch segmentations    <Tab> \
+    \n\n"
+
 
 def recursive_map(f, it):
     return (recursive_map(f, x) if isinstance(x, tuple) else f(x) for x in it)
@@ -36,22 +59,30 @@ class App():
 
         self.root = self.draw_window(name)
         self.root.bind('<Return>', self.set_dims)
-        self.root.bind('<c>', self.set_dims)
-        self.root.bind('<w>', self.switch_dims)
-        self.root.bind('<Command-r>', self.recalculate_corners)
+        self.root.bind('<x>', self.switch_dims)
+        self.root.bind('<Control-r>', self.recalculate_corners)
         self.root.bind('<f>', self._next_frame)
-        self.root.bind('<n>', self._next_frame)
-        self.root.bind('<Right>', self._next_frame)
         self.root.bind('<d>', self._prev_frame)
-        self.root.bind('<p>', self._prev_frame)
-        self.root.bind('<Left>', self._prev_frame)
-        self.root.bind('<Command-b>', self.load_images)
-        self.root.bind('<Command-s>', self.save_to)
-        self.root.bind('<Shift-s>', self.skip)
+        self.root.bind('<Right>', self.increase_width)
+        self.root.bind('<Left>', self.decrease_width)
+        self.root.bind('<Up>', self.increase_width)
+        self.root.bind('<Down>', self.decrease_width)
+        self.root.bind('<Control-o>', self.load_images)
+        self.root.bind('<Control-s>', self.save_to)
+        self.root.bind('<K>', self.skip)
+        self.root.bind('<N>', self.new_segmentation)
+        self.root.bind('<Tab>', self.persp_image.next_index)
 
     def run(self):
         self.root.mainloop()
         self.refresh()
+
+    def open_keybinds(self, event=None):
+        keybind_win = tk.Toplevel(self.root)
+        keybind_win.title("Keybinds")
+        text = tk.Label(keybind_win, anchor='w', justify=tk.LEFT, text=keybinds)
+        text.configure(font=("Menlo", 14))
+        text.pack(side=tk.LEFT, fill="both")
 
     def draw_window(self, name):
         root = tk.Tk(name)
@@ -92,7 +123,6 @@ class App():
         navbar = tk.Frame(master=content, padx=3, pady=3, width=600, height=10, borderwidth=5, relief="ridge")
 
         navbar.columnconfigure([0, 5], minsize=50)
-        navbar.rowconfigure(0, weight=1)
 
         navbar.columnconfigure(0, weight=1)
         navbar.columnconfigure(1, weight=1)
@@ -102,14 +132,17 @@ class App():
         navbar.columnconfigure(5, weight=1)
 
 
-        bt_next = tk.Button(navbar, text="Next", command=self._next_frame, fg="black")
-        bt_next.grid(row=0, column=5, rowspan=2, sticky=("nsew"))
+        bt_keybinds = tk.Button(navbar, text="Keybinds", command=self.open_keybinds, takefocus=0, fg="black")
+        bt_keybinds.grid(row=0, column=0, sticky="nsew")
 
-        bt_prev = tk.Button(navbar, text="Previous", command=self._prev_frame, fg="black")
-        bt_prev.grid(row=0, column=0, rowspan=2, sticky=("nsew"))
+        bt_next = tk.Button(navbar, text="Next", command=self._next_frame, takefocus=0, fg="black")
+        bt_next.grid(row=1, column=5, sticky=("nsew"))
 
-        bt_browse = tk.Button(navbar,text="Browse",command=self.load_images, fg="black")
-        bt_browse.grid(row=0, column=2, columnspan=2, sticky=("nsew"))
+        bt_prev = tk.Button(navbar, text="Previous", command=self._prev_frame, takefocus=0, fg="black")
+        bt_prev.grid(row=1, column=0, sticky=("nsew"))
+
+        bt_browse = tk.Button(navbar,text="Browse",command=self.load_images, takefocus=0, fg="black")
+        bt_browse.grid(row=1, column=2, columnspan=2, sticky=("nsew"))
         return navbar
 
     def _draw_editor(self, content):
@@ -125,6 +158,7 @@ class App():
         self.bt_switchdim = tk.Button(master=controls_frame, text="sWitch dimensions", command=self.switch_dims, fg="black")
         bt_recal_corners = tk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners, fg="black")
         bt_save = tk.Button(controls_frame, text="Save",command=self.save_to, fg="black")
+        self.lb_seg_index = tk.Label(controls_frame, text="Segmentation: 1")
 
         self.pv_width.insert(tk.END, 10)
         self.pv_height.insert(tk.END, 6)
@@ -135,6 +169,7 @@ class App():
         self.bt_switchdim.pack(side=tk.LEFT)
         bt_recal_corners.pack(side=tk.LEFT)
         bt_save.pack(side=tk.LEFT)
+        self.lb_seg_index.pack(side=tk.LEFT)
 
         self.draw_image_frames(editor_frame)
         return editor_frame
@@ -143,7 +178,7 @@ class App():
         self.persp_frame = Frame(editor_frame, width=100, height=100)
         self.persp_frame.pack(side=tk.TOP, fill="both", expand=True)
 
-        self.persp_image = PerspectiveView(self, self.persp_frame)
+        self.persp_image = PerspectiveView(self, self.persp_frame, self.verbosity)
         self.persp_image.canvas.pack(side=tk.LEFT, fill="both", expand=True, padx=2, pady=2)
 
     def load_images(self, event=None):
@@ -189,21 +224,22 @@ class App():
                     }
                 )
                 all_segmentations = image_load.get_bb()
-                for segmentation in all_segmentations:
-                    an_id += 1
-                    polygon = Polygon(segmentation)
-                    bbox = bounding_box(segmentation)
-                    coco["annotations"].append(
-                    {
-                        "id": an_id,
-                        "image_id": id,
-                        "category_id": coco["categories"][0]["id"],
-                        "segmentation": [[item for items in segmentation for item in items]],
-                        "area": polygon.area,
-                        "bbox": [bbox[0][0],bbox[0][0],bbox[1][0]-bbox[0][0],bbox[1][1]-bbox[0][1]],
-                        "iscrowd": 0
-                    }
-                )
+                for segmentation_grid in all_segmentations:
+                    for segmentation in segmentation_grid:
+                        an_id += 1
+                        polygon = Polygon(segmentation)
+                        bbox = bounding_box(segmentation)
+                        coco["annotations"].append(
+                            {
+                                "id": an_id,
+                                "image_id": id,
+                                "category_id": coco["categories"][0]["id"],
+                                "segmentation": [[item for items in segmentation for item in items]],
+                                "area": polygon.area,
+                                "bbox": [bbox[0][0],bbox[0][0],bbox[1][0]-bbox[0][0],bbox[1][1]-bbox[0][1]],
+                                "iscrowd": 0
+                            }
+                        )
         path = str(Path(self.folder) / "annotations.json")
         f = open(path, "w+")
         json.dump(coco, f)
@@ -246,8 +282,8 @@ class App():
         self._next_frame()
 
     def set_dims(self, event=None):
-        self.persp_image.image_load.x_cells = int(self.pv_width.get())
-        self.persp_image.image_load.y_cells = int(self.pv_height.get())
+        self.persp_image.image_load.segmentations[self.persp_image.seg_index].x_cells = int(self.pv_width.get())
+        self.persp_image.image_load.segmentations[self.persp_image.seg_index].y_cells = int(self.pv_height.get())
         if self.verbosity > 1:
             print("width:", self.pv_width.get(), "\nheight:", self.pv_height.get())
         self.refresh()
@@ -262,9 +298,17 @@ class App():
         self.set_dims()
 
     def recalculate_corners(self, event=None):
-        self.persp_image.clear_all()
-        self.persp_image.image_load.auto_detect()
+        os.system("clear")
+        img_load = self.persp_image.image_load
+        self.persp_image.reset()
+        img_load.segmentations[0].corners, img_load.segmentations[0].adjusted_corners = self.persp_image.image_load.auto_detect()
+        print("indicators after reset:", self.persp_image.indicators)
         self.refresh()
+        print("indicators after refresh:", self.persp_image.indicators)
+
+    def new_segmentation(self, event=None):
+        print("new segmentation")
+        self.persp_image.new_segmentation()
 
 
 class Segmentation():
@@ -279,6 +323,13 @@ class Segmentation():
         self.cv_warp_image = None
         self.trans_matrix = None
 
+    def reset(self):
+        self.corners = np.array([])
+        self.adjusted_corners = np.array([])
+        self.vert_lines = []
+        self.hor_lines = []
+        self.cv_warp_image = None
+        self.trans_matrix = None
 
 class ImageLoad():
 
@@ -307,6 +358,9 @@ class ImageLoad():
             print("resize factor:", self.resize_factor)
     
         self.segmentations = [Segmentation()]
+
+    def new_segmentation(self):
+        self.segmentations.append(Segmentation())
 
     def calculate_lines(self, img, segmentation):
         vert_lines = []
@@ -337,31 +391,39 @@ class ImageLoad():
         return corners, adjusted_corners
 
     def refresh(self):
+        if self.verbosity > 1:
+            print("refreshing points")
+        print("refresh")
         global default_image
         # If points never set yet, will auto-calculate best guess
         seg = self.segmentations[0]
         if seg.corners.shape[0] == 0 and seg.adjusted_corners.shape[0] == 0:
             seg.corners, seg.adjusted_corners = self.auto_detect()
-        
-        if seg.adjusted_corners.shape[0] != 0:
-            if self.verbosity > 1:
-                print("loading corners from save")
-            seg.corners = self.convert_backward(*seg.adjusted_corners)
-            # self.adjusted_corners = self.convert_points_forward(*self.corners)
-
-        if self.verbosity > 1:
-            print("adjusted corners:", seg.adjusted_corners)
-            print("corners to warp on:", seg.corners)
-
+    
         persp_img = self.cv_image.copy()
+        self.skip = False
         for seg in self.segmentations:
-            if seg.corners.shape[0] % 4 != 0:
+            if self.verbosity > 1:
+                print("adjusted corners:", seg.adjusted_corners)
+                print("corners to warp on:", seg.corners)
+            if seg.adjusted_corners.shape[0] != 0:
+                if self.verbosity > 1:
+                    print("loading corners from save")
+                seg.corners = self.convert_backward(*seg.adjusted_corners)
+                # self.adjusted_corners = self.convert_points_forward(*self.corners)
+            corner_count = seg.corners.shape[0]
+            if corner_count != 4:
                 if self.verbosity > 0:
-                    print("Bad Image")
+                    if corner_count == 0:
+                        print("Hint: Hold down shift and click on the corners of the panel to add a segmentation \
+                                or press <Control-k> to skip this image.")
+                    if corner_count % 4 == 0:
+                        print("Hint: Did you forget to create a new segmentation? Press recalculate and then \
+                                <Control-n> to create a new segmentation. You can press <Tab> to switch between \
+                                them.")
                 self.skip = True
                 persp_img = self.cv_image
             else:
-                self.skip = False
                 seg.cv_warp_image, seg.trans_matrix = four_point_transform(self.cv_image, seg.corners)
                 vert_lines, hor_lines = self.calculate_lines(seg.cv_warp_image, seg)
                 vert_warp_lines, hor_warp_lines = self.untransform_lines(vert_lines, hor_lines, seg)
@@ -379,22 +441,25 @@ class ImageLoad():
         return True
 
     def get_bb(self):
-        v_lines1, v_lines2 = self.vert_lines[0], reversed(self.vert_lines[1])
-        h_lines1, h_lines2 = self.hor_lines[0], reversed(self.hor_lines[1])
-
-        v_lines = [(p1, p2) for p1, p2 in zip(v_lines1, v_lines2)]
-        h_lines = [(p1, p2) for p1, p2 in zip(h_lines1, h_lines2)]
-        
         all_segmentations = []
-        for i in range(len(v_lines)-1):
-            for j in range(len(h_lines)-1):
-                # Get all points CCW
-                segmentation = []
-                segmentation.append(self._get_intersection(v_lines, h_lines, i, j))
-                segmentation.append(self._get_intersection(v_lines, h_lines, i+1, j))
-                segmentation.append(self._get_intersection(v_lines, h_lines, i+1, j+1))
-                segmentation.append(self._get_intersection(v_lines, h_lines, i, j+1))
-                all_segmentations.append(segmentation)
+        for segmentation in self.segmentations:
+            v_lines1, v_lines2 = self.vert_lines[0], reversed(self.vert_lines[1])
+            h_lines1, h_lines2 = self.hor_lines[0], reversed(self.hor_lines[1])
+
+            v_lines = [(p1, p2) for p1, p2 in zip(v_lines1, v_lines2)]
+            h_lines = [(p1, p2) for p1, p2 in zip(h_lines1, h_lines2)]
+            
+            sementation_grid = []
+            for i in range(len(v_lines)-1):
+                for j in range(len(h_lines)-1):
+                    # Get all points CCW
+                    segmentation = []
+                    segmentation.append(self._get_intersection(v_lines, h_lines, i, j))
+                    segmentation.append(self._get_intersection(v_lines, h_lines, i+1, j))
+                    segmentation.append(self._get_intersection(v_lines, h_lines, i+1, j+1))
+                    segmentation.append(self._get_intersection(v_lines, h_lines, i, j+1))
+                    sementation_grid.append(segmentation)
+            all_segmentations.append(sementation_grid)
         return all_segmentations
 
     def _get_intersection(self, line1, line2, i, j):
@@ -441,14 +506,15 @@ class ImageLoad():
             px, py = int(p[0]/self.resize_factor[0]), int(p[1]/self.resize_factor[1])
             output.append([px, py])
         return np.array(output)
-   
 
-class InteractiveCanvas():
 
+class PerspectiveView():
+    
     radius = 3
 
     def __init__(self, app, master, verbosity=0):
         self.app = app
+        self.verbosity = verbosity
 
         self.selected = None
 
@@ -457,20 +523,61 @@ class InteractiveCanvas():
 
         self.canvas.bind('<1>', self.select_circle)
         self.canvas.bind('<Shift-1>', self.make_circle)
-        self.canvas.bind('<Control-1>', self.delete_circle)
+        # self.canvas.bind('<Control-1>', self.delete_circle)
+        self.seg_index = 0
 
-        self.indicators = []
+        self.can_draw = True
+
+        self.indicators = [[]]
+
+    def reset(self):
+        for segmentation in self.image_load.segmentations:
+            segmentation.reset()
+        self.clear_all()
+        self.indicators = [[]]
+        self.image_load.segmentations = [Segmentation()]
+        self.next_index()
+
+    def next_index(self, event=None):
+        max_index = len(self.indicators)
+        self.seg_index += 1
+        if self.seg_index >= max_index:
+            self.seg_index = 0
+        self.app.lb_seg_index.configure(text="Segmentation: " + str(self.seg_index + 1))
+        if self.verbosity > 0:
+            print("Current index:", self.seg_index)
+
+    def allow_draw(self, event=None):
+        self.can_draw = True
 
     def make_circle(self, event):
-        x, y, r = event.x, event.y, self.radius
-        self.indicators.append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='white'))
+        if self.can_draw:
+            self.canvas.after(200, self.allow_draw)
+            x, y, r = event.x, event.y, self.radius
+            self.indicators[self.seg_index].append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='white'))
+            print("Created point in indicator list #", self.seg_index)
+            print("All indicators, after cicking to draw point:", self.indicators)
+            self.update_corners()
+            self.can_draw = False
 
     def delete_circle(self, event):
         x, y, r = event.x, event.y, self.radius
+        iid = self.canvas.find_enclosed(x - 26, y - 26, x + 26, y + 26)
+        print(iid)
+        for widget in iid:
+            self.canvas.delete(widget)
+        self.refresh()
+        self.update_corners()
 
     def clear_all(self):
-        for point in self.indicators:
-            self.canvas.delete(point)
+        print("CLEARING ALL")
+        print(self.canvas.winfo_children())
+        # for widget in self.canvas.winfo_children():
+        #     print("destroying", widget)
+        #     widget.destroy()
+        for seg_indicators in self.indicators:
+            for point in seg_indicators:
+                self.canvas.delete(point)
 
     def set_image(self, image_load):
         self.image_load = image_load
@@ -483,60 +590,49 @@ class InteractiveCanvas():
 
     def move_circle(self, event):
         x, y, r = event.x, event.y, self.radius
-        self.canvas.coords('selected', x-r, y-r, x+r, y+r)
+        try:
+            self.canvas.coords('selected', x-r, y-r, x+r, y+r)
+        except:
+            if self.verbosity > 1:
+                print("\tYou can't select/move the background canvas")
 
     def deselect(self, event):
+        self.update_corners()
         self.canvas.dtag('selected')    # removes the 'selected' tag
         self.canvas.unbind('<Motion>')
         self.canvas.bind('<Shift-1>', self.make_circle)
-
-
-class PerspectiveView(InteractiveCanvas):
-    def __init__(self, master, verbosity=0):
-        super().__init__(master, verbosity)
-
-    # def draw_midpoints(self):
-    #     r = self.radius
-    #     for i, line_list in enumerate(self.image_load.line_lists):
-    #         for p in line_list:
-    #             print(p)
-    #             x, y = int(p[0]), int(p[1])
-    #             self.indicators.append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='blue'))
-
-    def draw_points(self, *points):
-        self.indicators = []
-        r = self.radius
-        for p in points:
-            x, y = int(p[0]), int(p[1])
-            self.indicators.append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='white'))
-
+      
     def update_corners(self):
-        if self.indicators:
-            for seg in self.image_load.segmentations:
+        print("Transferring clicked points to image_load")
+        print("\tCurrent segmentations list:", self.image_load.segmentations)
+        print("\tCurrent indicator list:", self.indicators)
+        if self.indicators[0]:
+            for seg, indicator_list in zip(self.image_load.segmentations, self.indicators):
+                
                 corners = []
-                for widget in self.indicators:
+                for widget in indicator_list:
                     x1, y1, _, _ = self.canvas.coords(widget)
                     corners.append([x1+self.radius, y1+self.radius])
                 seg.adjusted_corners = np.asarray(corners)
-            self.image_load.refresh()
+                print("\t\tSegmentation adjusted corners:", seg.adjusted_corners)
+            # self.image_load.refresh()
             self.app.refresh()
-
-    def deselect(self, event):
-        super().deselect(event)
-        self.update_corners()
-
-    def delete_circle(self, event):
-        super().delete_circle(event)
-        self.update_corners()
-
-    def make_circle(self, event):
-        super().make_circle(event)
-        self.update_corners()
-
+        
     def refresh(self):
+        r = self.radius
         self.canvas.itemconfig(self.image, image = self.image_load.tk_image)
-        for seg in self.image_load.segmentations:
-            self.draw_points(*seg.adjusted_corners)
+        for indicator_list in self.indicators:
+            indicator_list.clear()
+        for seg, indicator_list in zip(self.image_load.segmentations, self.indicators):
+            for p in seg.adjusted_corners:
+                x, y = int(p[0]), int(p[1])
+                indicator_list.append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='white'))
+
+    def new_segmentation(self):
+        self.image_load.new_segmentation()
+        self.indicators.append([])
+        self.next_index()
+        print("Indicators after adding segmentation:", self.indicators)
 
 
 def get_midpoints(pt1, pt2, splits):
