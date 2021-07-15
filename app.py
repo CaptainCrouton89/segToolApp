@@ -31,8 +31,8 @@ keybinds = "\n\
     \n\
     \n\tNAVIGATING BETWEEN FRAMES **********\t\
     \n\
-    \n\tNext frame              <f>, <Right> \
-    \n\tPrevious frame          <d>, <Left> \
+    \n\tNext frame              <f> \
+    \n\tPrevious frame          <d> \
     \n\tSkip frame              <Shift-k> \
     \n\
     \n\
@@ -41,10 +41,68 @@ keybinds = "\n\
     \n\tReset                   <Control-r> \
     \n\tSet dimensions          <Return> \
     \n\tSwitch dimensions       <x> \
+    \n\tIncrease rows           <Right> \
+    \n\tDecrease rows           <Left> \
+    \n\tIncrease columns        <Up> \
+    \n\tDecrease columns        <Down> \
     \n\tNew segmentation        <Shift-n> \
     \n\tSwitch segmentations    <Tab> \
     \n\n"
 
+instructions = "\
+    \n\
+    \n\tOPEN THE DIRECTORY ************************************************     \
+    \n\tClick browse (<Control-o>) to open a directory on your local     \
+    \n\tmachine. Then navigate to the folder containing the images you wish \
+    \n\tto segment, and open that folder. \
+    \n\
+    \n\tSEGMENT THE IMAGES ************************************************     \
+    \n\tThe application will try to automatically find the corners of the \
+    \n\timage for you, and will place four white circles at each corner. \
+    \n\tHowever, it does not always succeed, in which case you will \
+    \n\tmanually need to select the corners. You can place a corner by \
+    \n\tholding shift while clicking on the image. Once four corners have \
+    \n\tbeen placed, it will automatically draw the segmentation, and you \
+    \n\tcan proceed to the next one (<f>) or go back (<d>).\
+    \n\
+    \n\tYou may find that the segmentation grid does not line up perfectly \
+    \n\twith the cells of the solar panel. In this case, you can click and \
+    \n\tdrag the corners as you please. If the image still does not line up \
+    \n\tyou can add an additional segmentation grid with <Control-n>. You \
+    \n\tcan click and drag points from either segmentation grid. If you \
+    \n\twantto add more points, make sure you are on the correct \
+    \n\tsegmentation grid, as indicated by the number in the top right, to \
+    \n\tthe right of the 'Recalculate' button. You can switch which grid \
+    \n\tyou are adding points to by hitting <Tab>.\
+    \n\
+    \n\tIf you mess up, and would like to start over at any time, you can \
+    \n\thit 'Recalculate' (<Control-r>) and it will reset. \
+    \n\
+    \n\tYou may also find that you need to adjust the dimensions of the \
+    \n\tgrid. If this is the case, manually typing in the dimensions in the \
+    \n\ttop left, or using the arrow keys will let change the number of  \
+    \n\trows and columns in the grid. You can also switch the dimensions of \
+    \n\tthe grid by clicking the 'Switch dimensions' button (<x>). \
+    \n\
+    \n\tIf an image is unsaveable, you can skip the image by pressing \
+    \n\t<Shift-k>. This will force the application to skip this image when \
+    \n\texporting the annotation file. \
+    \n\
+    \n\tSAVE, EXPORT, UPLOAD*********************************************** \
+    \n\tOnce you are finished, save the annotation file (<Control-s>). The \
+    \n\tfile will be saved to the same location as the images with the name \
+    \n\t'annotations.json'. \
+    \n\
+    \n\tYou may need to also upload these to the azure file share. If you \
+    \n\thave access to it, the entire folder should be uploaded in the share \
+    \n\
+    \n\t/File Shares/pv-segment-training/clean-segmentation-data-for-training \
+    \n\
+    \n\tand the folder containing the images and annotation should be \
+    \n\trenamed to the date and time in the format 'yyyy-mm-dd hh.mm'. For \
+    \n\texample, '2021-07-15 14.03'. \
+    \n\t\
+\n"
 
 def recursive_map(f, it):
     return (recursive_map(f, x) if isinstance(x, tuple) else f(x) for x in it)
@@ -65,8 +123,8 @@ class App():
         self.root.bind('<d>', self._prev_frame)
         self.root.bind('<Right>', self.increase_width)
         self.root.bind('<Left>', self.decrease_width)
-        self.root.bind('<Up>', self.increase_width)
-        self.root.bind('<Down>', self.decrease_width)
+        self.root.bind('<Up>', self.increase_height)
+        self.root.bind('<Down>', self.decrease_height)
         self.root.bind('<Control-o>', self.load_images)
         self.root.bind('<Control-s>', self.save_to)
         self.root.bind('<K>', self.skip)
@@ -81,6 +139,13 @@ class App():
         keybind_win = tk.Toplevel(self.root)
         keybind_win.title("Keybinds")
         text = tk.Label(keybind_win, anchor='w', justify=tk.LEFT, text=keybinds)
+        text.configure(font=("Menlo", 14))
+        text.pack(side=tk.LEFT, fill="both")
+
+    def open_instructions(self, event=None):
+        inst_win = tk.Toplevel(self.root)
+        inst_win.title("Instructions")
+        text = tk.Label(inst_win, anchor='w', justify=tk.LEFT, text=instructions)
         text.configure(font=("Menlo", 14))
         text.pack(side=tk.LEFT, fill="both")
 
@@ -111,12 +176,28 @@ class App():
 
     def _draw_header(self, content):
         header = tk.Frame(master=content, padx=3, pady=3, width=600, height=50, borderwidth=5, relief="ridge")
+        header.columnconfigure([0, 5], minsize=50)
+        header.columnconfigure(0, weight=1)
+        header.columnconfigure(1, weight=1)
+        header.columnconfigure(2, weight=1)
+        header.columnconfigure(3, weight=1)
+        header.columnconfigure(4, weight=1)
+        header.columnconfigure(5, weight=1)
+
         self.name = tk.Label(master=header, text="NAME", fg="black")
-        keybinds = tk.Label(master=header, text="All buttons are bound to the key corresponding to their first capital letter.", fg="black")
-        guide = tk.Label(master=header, text="Shift-Click to add point.", fg="black")
-        self.name.pack()
-        keybinds.pack()
-        guide.pack()
+        self.name.grid(row=0, column=0, columnspan=6, sticky="nsew")
+
+        bt_keybinds = tk.Button(header, text="Keybinds", command=self.open_keybinds, takefocus=0, fg="black")
+        bt_keybinds.grid(row=3, column=0, sticky="nsew")
+
+        bt_instructions = tk.Button(header, text="Instructions", command=self.open_instructions, takefocus=0, fg="black")
+        bt_instructions.grid(row=3, column=1, sticky="nsew")
+
+        bt_browse = tk.Button(header,text="Browse",command=self.load_images, takefocus=0, fg="black")
+        bt_browse.grid(row=3, column=4, sticky="nsew")
+
+        bt_save = tk.Button(header, text="Save",command=self.save_to, fg="black")
+        bt_save.grid(row=3, column=5, sticky="nsew")
         return header
 
     def _draw_nav(self, content):
@@ -132,17 +213,13 @@ class App():
         navbar.columnconfigure(5, weight=1)
 
 
-        bt_keybinds = tk.Button(navbar, text="Keybinds", command=self.open_keybinds, takefocus=0, fg="black")
-        bt_keybinds.grid(row=0, column=0, sticky="nsew")
-
         bt_next = tk.Button(navbar, text="Next", command=self._next_frame, takefocus=0, fg="black")
         bt_next.grid(row=1, column=5, sticky=("nsew"))
 
         bt_prev = tk.Button(navbar, text="Previous", command=self._prev_frame, takefocus=0, fg="black")
         bt_prev.grid(row=1, column=0, sticky=("nsew"))
 
-        bt_browse = tk.Button(navbar,text="Browse",command=self.load_images, takefocus=0, fg="black")
-        bt_browse.grid(row=1, column=2, columnspan=2, sticky=("nsew"))
+        
         return navbar
 
     def _draw_editor(self, content):
@@ -152,14 +229,16 @@ class App():
         controls_frame = tk.Frame(master=editor_frame)
         controls_frame.pack(side=tk.TOP, fill="x")
 
-        self.pv_width = tk.Entry(master=controls_frame, width=3, fg="black", bg="white")
-        self.pv_height = tk.Entry(master=controls_frame, width=3, fg="black", bg="white")
+        self.pv_width = tk.Entry(master=controls_frame, width=3, fg="black", bg="white", takefocus=0)
+        self.pv_height = tk.Entry(master=controls_frame, width=3, fg="black", bg="white", takefocus=0)
         self.bt_setdim = tk.Button(master=controls_frame, text="Confirm dimensions", command=self.set_dims, fg="black")
-        self.bt_switchdim = tk.Button(master=controls_frame, text="sWitch dimensions", command=self.switch_dims, fg="black")
+        self.bt_switchdim = tk.Button(master=controls_frame, text="Switch dimensions", command=self.switch_dims, fg="black")
         bt_recal_corners = tk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners, fg="black")
-        bt_save = tk.Button(controls_frame, text="Save",command=self.save_to, fg="black")
         self.lb_seg_index = tk.Label(controls_frame, text="Segmentation: 1")
 
+
+        self.pv_width.delete(0, 'end')
+        self.pv_height.delete(0, 'end')
         self.pv_width.insert(tk.END, 10)
         self.pv_height.insert(tk.END, 6)
 
@@ -168,7 +247,7 @@ class App():
         self.bt_setdim.pack(side=tk.LEFT)
         self.bt_switchdim.pack(side=tk.LEFT)
         bt_recal_corners.pack(side=tk.LEFT)
-        bt_save.pack(side=tk.LEFT)
+        
         self.lb_seg_index.pack(side=tk.LEFT)
 
         self.draw_image_frames(editor_frame)
@@ -298,17 +377,41 @@ class App():
         self.set_dims()
 
     def recalculate_corners(self, event=None):
-        os.system("clear")
         img_load = self.persp_image.image_load
         self.persp_image.reset()
         img_load.segmentations[0].corners, img_load.segmentations[0].adjusted_corners = self.persp_image.image_load.auto_detect()
-        print("indicators after reset:", self.persp_image.indicators)
         self.refresh()
-        print("indicators after refresh:", self.persp_image.indicators)
 
     def new_segmentation(self, event=None):
-        print("new segmentation")
         self.persp_image.new_segmentation()
+
+    def refresh_dims(self):
+        self.pv_width.delete(0, 'end')
+        self.pv_height.delete(0, 'end')
+        x = self.persp_image.image_load.segmentations[self.persp_image.seg_index].x_cells
+        y = self.persp_image.image_load.segmentations[self.persp_image.seg_index].y_cells
+        self.pv_width.insert(tk.END, x)
+        self.pv_height.insert(tk.END, y)
+
+    def increase_width(self, event=None):
+        self.persp_image.image_load.segmentations[self.persp_image.seg_index].x_cells += 1
+        self.refresh_dims()
+        self.refresh()
+
+    def decrease_width(self, event=None):
+        self.persp_image.image_load.segmentations[self.persp_image.seg_index].x_cells -= 1
+        self.refresh_dims()
+        self.refresh()
+
+    def increase_height(self, event=None):
+        self.persp_image.image_load.segmentations[self.persp_image.seg_index].y_cells += 1
+        self.refresh_dims()
+        self.refresh()
+
+    def decrease_height(self, event=None):
+        self.persp_image.image_load.segmentations[self.persp_image.seg_index].y_cells -= 1
+        self.refresh_dims()
+        self.refresh()
 
 
 class Segmentation():
@@ -392,8 +495,7 @@ class ImageLoad():
 
     def refresh(self):
         if self.verbosity > 1:
-            print("refreshing points")
-        print("refresh")
+            print("Refreshing image_load")
         global default_image
         # If points never set yet, will auto-calculate best guess
         seg = self.segmentations[0]
@@ -555,26 +657,23 @@ class PerspectiveView():
             self.canvas.after(200, self.allow_draw)
             x, y, r = event.x, event.y, self.radius
             self.indicators[self.seg_index].append(self.canvas.create_oval(x-r, y-r, x+r, y+r, outline='black', fill='white'))
-            print("Created point in indicator list #", self.seg_index)
-            print("All indicators, after cicking to draw point:", self.indicators)
+            if self.verbosity > 1:
+                print("Created point in indicator list #", self.seg_index)
+                print("All indicators, after cicking to draw point:", self.indicators)
             self.update_corners()
             self.can_draw = False
 
     def delete_circle(self, event):
         x, y, r = event.x, event.y, self.radius
         iid = self.canvas.find_enclosed(x - 26, y - 26, x + 26, y + 26)
-        print(iid)
         for widget in iid:
             self.canvas.delete(widget)
         self.refresh()
         self.update_corners()
 
     def clear_all(self):
-        print("CLEARING ALL")
-        print(self.canvas.winfo_children())
-        # for widget in self.canvas.winfo_children():
-        #     print("destroying", widget)
-        #     widget.destroy()
+        if self.verbosity > 0:
+            print("Clearing points")
         for seg_indicators in self.indicators:
             for point in seg_indicators:
                 self.canvas.delete(point)
@@ -603,9 +702,10 @@ class PerspectiveView():
         self.canvas.bind('<Shift-1>', self.make_circle)
       
     def update_corners(self):
-        print("Transferring clicked points to image_load")
-        print("\tCurrent segmentations list:", self.image_load.segmentations)
-        print("\tCurrent indicator list:", self.indicators)
+        if self.verbosity > 1:
+            print("Transferring clicked points to image_load")
+            print("\tCurrent segmentations list:", self.image_load.segmentations)
+            print("\tCurrent indicator list:", self.indicators)
         if self.indicators[0]:
             for seg, indicator_list in zip(self.image_load.segmentations, self.indicators):
                 
@@ -614,8 +714,6 @@ class PerspectiveView():
                     x1, y1, _, _ = self.canvas.coords(widget)
                     corners.append([x1+self.radius, y1+self.radius])
                 seg.adjusted_corners = np.asarray(corners)
-                print("\t\tSegmentation adjusted corners:", seg.adjusted_corners)
-            # self.image_load.refresh()
             self.app.refresh()
         
     def refresh(self):
@@ -632,7 +730,8 @@ class PerspectiveView():
         self.image_load.new_segmentation()
         self.indicators.append([])
         self.next_index()
-        print("Indicators after adding segmentation:", self.indicators)
+        if self.verbosity > 1:
+            print("Indicators after adding segmentation:", self.indicators)
 
 
 def get_midpoints(pt1, pt2, splits):
