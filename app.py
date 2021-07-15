@@ -3,10 +3,8 @@ from datetime import date
 import json
 from shapely.geometry import Polygon
 from PIL import Image, ImageTk
-from warpTools import four_point_transform, order_points
-import math
+from warpTools import four_point_transform
 import cornerDetectionTools
-from rotationTools import smart_rotate
 from cvTools import *
 from tkinter import filedialog, Canvas, Frame
 from tkinter.messagebox import showinfo
