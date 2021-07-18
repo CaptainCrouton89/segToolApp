@@ -232,7 +232,7 @@ class App():
         self.bt_setdim = tk.Button(master=controls_frame, text="Confirm dimensions", command=self.set_dims, fg="black")
         self.bt_switchdim = tk.Button(master=controls_frame, text="Switch dimensions", command=self.switch_dims, fg="black")
         bt_recal_corners = tk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners, fg="black")
-        self.lb_seg_index = tk.Label(controls_frame, text="Segmentation: 1")
+        self.lb_seg_index = tk.Label(controls_frame, text="Segmentation: 1", fg="black", takefocus=0)
 
 
         self.pv_width.delete(0, 'end')
@@ -543,8 +543,8 @@ class ImageLoad():
     def get_bb(self):
         all_segmentations = []
         for segmentation in self.segmentations:
-            v_lines1, v_lines2 = self.vert_lines[0], reversed(self.vert_lines[1])
-            h_lines1, h_lines2 = self.hor_lines[0], reversed(self.hor_lines[1])
+            v_lines1, v_lines2 = segmentation.vert_lines[0], reversed(segmentation.vert_lines[1])
+            h_lines1, h_lines2 = segmentation.hor_lines[0], reversed(segmentation.hor_lines[1])
 
             v_lines = [(p1, p2) for p1, p2 in zip(v_lines1, v_lines2)]
             h_lines = [(p1, p2) for p1, p2 in zip(h_lines1, h_lines2)]
