@@ -252,14 +252,15 @@ class App():
         return editor_frame
 
     def draw_image_frames(self, editor_frame):
-        self.persp_frame = Frame(editor_frame, width=100, height=100)
+        self.persp_frame = Frame(editor_frame, width=200, height=200, borderwidth=0)
         self.persp_frame.pack(side=tk.TOP, fill="both", expand=True)
 
         self.persp_image = PerspectiveView(self, self.persp_frame, self.verbosity)
-        self.persp_image.canvas.pack(side=tk.LEFT, fill="both", expand=True, padx=10, pady=10)
+        self.persp_image.canvas.pack(side=tk.TOP, fill="both", expand=True)
 
     def load_images(self, event=None):
-        w, h = self.persp_frame.winfo_width(), self.persp_frame.winfo_height()
+        w, h = self.persp_image.canvas.winfo_width(), self.persp_frame.winfo_height()
+        print(w, h)
         self.all_images = []
         self.index = -1
 
@@ -271,7 +272,7 @@ class App():
         for filename in os.listdir(self.folder):
             if filename.endswith(".jpg") or filename.endswith(".png"):
                 filepath = str(in_path / filename)
-                self.all_images.append(ImageLoad(filepath, resize=(w-10, h-10), verbosity=self.verbosity))
+                self.all_images.append(ImageLoad(filepath, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity))
         if self.verbosity > 0:
             for i in self.all_images:
                 print(i.path)
@@ -356,6 +357,7 @@ class App():
 
     def skip(self, event=None):
         self.persp_image.image_load.skip = True
+        self.persp_image.seg_index = 0
         self._next_frame()
 
     def set_dims(self, event=None):
@@ -619,7 +621,8 @@ class PerspectiveView():
         self.selected = None
 
         self.canvas = Canvas(master, width=500, height=500)
-        self.image = self.canvas.create_image(0, 0, anchor = tk.NW, image=None)
+
+        self.image = self.canvas.create_image(10, 10, anchor=tk.NW, image=None)
 
         self.canvas.bind('<1>', self.select_circle)
         self.canvas.bind('<Shift-1>', self.make_circle)
