@@ -256,7 +256,7 @@ class App():
         self.persp_frame.pack(side=tk.TOP, fill="both", expand=True)
 
         self.persp_image = PerspectiveView(self, self.persp_frame, self.verbosity)
-        self.persp_image.canvas.pack(side=tk.LEFT, fill="both", expand=True, padx=2, pady=2)
+        self.persp_image.canvas.pack(side=tk.LEFT, fill="both", expand=True, padx=10, pady=10)
 
     def load_images(self, event=None):
         w, h = self.persp_frame.winfo_width(), self.persp_frame.winfo_height()
@@ -686,8 +686,18 @@ class PerspectiveView():
         self.canvas.addtag_withtag('selected', tk.CURRENT)
 
     def move_circle(self, event):
+        min_x, min_y, max_x, max_y = 0, 0, self.canvas.winfo_width(), self.canvas.winfo_height()
         x, y, r = event.x, event.y, self.radius
         try:
+            
+            if x > max_x:
+                x = max_x
+            if y > max_y:
+                y = max_y
+            if x < min_x:
+                x = min_x
+            if y < min_y:
+                y = min_y
             self.canvas.coords('selected', x-r, y-r, x+r, y+r)
         except:
             if self.verbosity > 1:
