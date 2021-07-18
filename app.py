@@ -450,7 +450,7 @@ class ImageLoad():
         self.pil_image = self.o_pil_image.resize((resize[0], resize[1]))
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
 
-        self.width, self.height = self.o_pil_image.size
+        self.height, self.width, _ = self.cv_image.shape
 
         # Persp shift vars
         self.resize_factor = (resize[0]/self.width, resize[1]/self.height)
