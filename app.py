@@ -272,7 +272,7 @@ class App():
         for filename in os.listdir(self.folder):
             if filename.endswith(".jpg") or filename.endswith(".png"):
                 filepath = str(in_path / filename)
-                self.all_images.append(ImageLoad(filepath, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity))
+                self.all_images.append(ImageLoad(filepath, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity)) # Have to multiply by weird constant in order make image fit nicely. No idea why.
         if self.verbosity > 0:
             for i in self.all_images:
                 print(i.path)
