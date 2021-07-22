@@ -1,0 +1,7 @@
+{
+    "listInspectionsUrl": "https://cea-pdc-api.azurewebsites.net/api/getannotatedinspections/",
+    "getInspectionUrl": "https://cea-pdc-api.azurewebsites.net/api/readannotatedinspectionbatch/",
+    "defectAPIKey": "5LNTTJ38S940LNCHHGUR2DDKEM6T8DYZ",
+    "azureAccountName": "pvsegmentstorage",
+    "azureAccountKey": "zsuyLFH+e/FL+wriyPT1Bp57xNpAk8ZgHyM9ifvpgvCH0nOTjTCoaw6CTtriH4EngDT+XFmkakEYqRlkj+JDvw=="
+}

@@ -1,7 +1,8 @@
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 import json
 from shapely.geometry import Polygon
+from azure.storage.fileshare import ShareClient, ShareFileClient, ShareDirectoryClient
 from PIL import Image, ImageTk
 from warpTools import four_point_transform
 import cornerDetectionTools
@@ -9,6 +10,7 @@ from cvTools import *
 from tkinter import filedialog, Canvas, Frame
 from tkinter.messagebox import showinfo
 import tkinter as tk
+import tkinter.ttk as ttk
 import os
 import cv2
 import numpy as np
@@ -17,24 +19,26 @@ import cocoConfig
 
 CW = 90
 CCW = -90
+SHARE_NAME = "pv-segment-training"
 
 default_image = "assets/default_img.png"
 
 keybinds = "\n\
-    \n\tFILE MANIPULATION ******************\t\
+    \n\tFILE MANIPULATION ***********************\t\
     \n\
     \n\tOpen directory          <Control-o> \
     \n\tSave annotations        <Control-s> \
+    \n\tSave + upload           <Control-Shift-s> \
     \n\
     \n\
-    \n\tNAVIGATING BETWEEN FRAMES **********\t\
+    \n\tNAVIGATING BETWEEN FRAMES ***************\t\
     \n\
     \n\tNext frame              <f> \
     \n\tPrevious frame          <d> \
     \n\tSkip frame              <Shift-k> \
     \n\
     \n\
-    \n\tSEGMENTATION ***********************\t\
+    \n\tSEGMENTATION ****************************\t\
     \n\
     \n\tReset                   <Control-r> \
     \n\tSet dimensions          <Return> \
@@ -82,9 +86,9 @@ instructions = "\
     \n\trows and columns in the grid. You can also switch the dimensions of \
     \n\tthe grid by clicking the 'Switch dimensions' button (<x>). \
     \n\
-    \n\tIf an image is unsaveable, you can skip the image by pressing \
-    \n\t<Shift-k>. This will force the application to skip this image when \
-    \n\texporting the annotation file. \
+    \n\tIf an image is unsaveable, you can skip the image by pressing the \
+    \n\tskip button (<Shift-k>). This will force the application to skip  \
+    \n\tthis image when exporting the annotation file. \
     \n\
     \n\tSAVE, EXPORT, UPLOAD*********************************************** \
     \n\tOnce you are finished, save the annotation file (<Control-s>). The \
@@ -125,9 +129,17 @@ class App():
         self.root.bind('<Down>', self.decrease_height)
         self.root.bind('<Control-o>', self.load_images)
         self.root.bind('<Control-s>', self.save_to)
+        self.root.bind('<Control-S>', self.save_and_upload)
         self.root.bind('<K>', self.skip)
         self.root.bind('<N>', self.new_segmentation)
         self.root.bind('<Tab>', self.persp_image.next_index)
+
+        f = open('config.json', 'r')
+        c = json.loads(f.read())
+        f.close()
+        self.connection_string = "DefaultEndpointsProtocol=https;AccountName=" + c['azureAccountName'] + \
+            ";AccountKey=" + c['azureAccountKey'] + \
+            ";EndpointSuffix=core.windows.net"
 
     def run(self):
         self.root.mainloop()
@@ -156,8 +168,8 @@ class App():
         content = tk.Frame(master=root, padx=3, pady=3, borderwidth=5, relief="ridge")
         content.pack(fill=tk.BOTH, expand=1)
 
-        content.rowconfigure([0, 1, 2], minsize=50)
-        content.columnconfigure([0], minsize=50)
+        content.rowconfigure([0, 1, 2], minsize=10)
+        content.columnconfigure([0], minsize=10)
         content.rowconfigure(1, weight=0)
         content.rowconfigure(2, weight=4)
         content.columnconfigure(0, weight=1)
@@ -173,17 +185,18 @@ class App():
         return root
 
     def _draw_header(self, content):
-        header = tk.Frame(master=content, padx=3, pady=3, width=600, height=50, borderwidth=5, relief="ridge")
-        header.columnconfigure([0, 5], minsize=50)
+        header = tk.Frame(master=content, padx=3, pady=3, width=800, height=50, borderwidth=5, relief="ridge")
+        header.columnconfigure([0, 5], minsize=10)
         header.columnconfigure(0, weight=1)
         header.columnconfigure(1, weight=1)
         header.columnconfigure(2, weight=1)
         header.columnconfigure(3, weight=1)
         header.columnconfigure(4, weight=1)
         header.columnconfigure(5, weight=1)
+        header.columnconfigure(6, weight=1)
 
         self.name = tk.Label(master=header, text="NAME", fg="black")
-        self.name.grid(row=0, column=0, columnspan=6, sticky="nsew")
+        self.name.grid(row=0, column=0, columnspan=7, sticky="nsew")
 
         bt_keybinds = tk.Button(header, text="Keybinds", command=self.open_keybinds, takefocus=0, fg="black")
         bt_keybinds.grid(row=3, column=0, sticky="nsew")
@@ -196,12 +209,16 @@ class App():
 
         bt_save = tk.Button(header, text="Save",command=self.save_to, fg="black")
         bt_save.grid(row=3, column=5, sticky="nsew")
+
+        bt_save_export = tk.Button(header, text="Save + Export",command=self.save_and_upload, fg="black")
+        bt_save_export.grid(row=3, column=6, sticky="nsew")
+
         return header
 
     def _draw_nav(self, content):
-        navbar = tk.Frame(master=content, padx=3, pady=3, width=600, height=10, borderwidth=5, relief="ridge")
+        navbar = tk.Frame(master=content, padx=3, pady=3, width=800, height=10, borderwidth=5, relief="ridge")
 
-        navbar.columnconfigure([0, 5], minsize=50)
+        navbar.columnconfigure([0, 5], minsize=10)
 
         navbar.columnconfigure(0, weight=1)
         navbar.columnconfigure(1, weight=1)
@@ -211,6 +228,9 @@ class App():
         navbar.columnconfigure(5, weight=1)
 
 
+        bt_skip = tk.Button(navbar, text="Skip", command=self.skip, takefocus=0, fg="black")
+        bt_skip.grid(row=1, column=4, sticky=("nsew"))
+        
         bt_next = tk.Button(navbar, text="Next", command=self._next_frame, takefocus=0, fg="black")
         bt_next.grid(row=1, column=5, sticky=("nsew"))
 
@@ -221,7 +241,7 @@ class App():
         return navbar
 
     def _draw_editor(self, content):
-        editor_frame = tk.Frame(master=content, padx=3, pady=3, width=600, height=5, borderwidth=5, relief="ridge")
+        editor_frame = tk.Frame(master=content, padx=3, pady=3, width=800, height=5, borderwidth=5, relief="ridge")
         self.editor_frame = editor_frame
 
         controls_frame = tk.Frame(master=editor_frame)
@@ -279,10 +299,51 @@ class App():
         
         self._next_frame()
 
+    def save_and_upload(self, event=None):
+        timestamp = datetime.today().strftime("%Y-%m-%d-%H-%M-%S")
+        annotation_path = self.save_to()
+        showinfo("Uploading", "Beginning upload to fileshare. This could take a while.")
+        in_path = Path(self.folder)
+        print("Uploading to:" + "output-from-segmentation/" + timestamp + "/annotations.json")
+
+        try:
+            dir_client = ShareDirectoryClient.from_connection_string(
+                self.connection_string, SHARE_NAME, "output-from-segmentation/" + timestamp)
+            dir_client.create_directory()
+        except:
+            print("Directory failure")
+
+        try:
+            with open(annotation_path + "/annotations.json", "r+") as a:
+                file_client = ShareFileClient.from_connection_string(
+                    self.connection_string, SHARE_NAME, file_path="output-from-segmentation/" + timestamp + "/annotations.json")
+                file_client.upload_file(a.read())
+        except:
+            print("Annotation upload failure")
+
+        try:
+            # Iterate through image directory
+            for filename in os.listdir(self.folder):
+                # tk.update_idletasks()
+                if filename.endswith(".jpg") or filename.endswith(".png"): 
+                    print("uploaded " + filename)
+                    filepath = str(in_path / filename)
+                    with open(filepath, "rb") as fp:
+                        file_client = ShareFileClient.from_connection_string(
+                            self.connection_string, SHARE_NAME, "output-from-segmentation/" + timestamp + "/" + filename)
+                        file_client.upload_file(fp.read())
+                else:
+                    continue
+        except:
+            print("Image upload failure")
+        showinfo("Done", "All images and annotations uploaded to the fileshare.")
+
     def save_to(self, event=None):
         # folder = filedialog.askdirectory(initialdir=".")
         coco = cocoConfig.get_boiler()
         datetime = str(date.today())
+
+        save_path = filedialog.askdirectory(initialdir=".")
         
         id = 0
         an_id = 0
@@ -318,9 +379,11 @@ class App():
                                 "iscrowd": 0
                             }
                         )
-        path = str(Path(self.folder) / "annotations.json")
+        path = str(Path(save_path) / "annotations.json")
         f = open(path, "w+")
         json.dump(coco, f)
+        showinfo("Saved", "Images have been saved to " + path +".")
+        return save_path
 
     def _next_frame(self, event=None):
         
@@ -448,6 +511,19 @@ class ImageLoad():
 
         self.path = path
         self.cv_image = cv2.imread(path)
+
+        ht, wd, cc= self.cv_image.shape
+        ww = wd+80
+        hh = ht+80
+        color = (0,0,0)
+        new_img = np.full((hh,ww,cc), color, dtype=np.uint8)
+        xx = (ww - wd) // 2
+        yy = (hh - ht) // 2
+
+        # copy img image into center of result image
+        new_img[yy:yy+ht, xx:xx+wd] = self.cv_image
+        self.cv_image = new_img
+
         self.o_pil_image = Image.open(path)
         self.pil_image = self.o_pil_image.resize((resize[0], resize[1]))
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
@@ -622,7 +698,7 @@ class PerspectiveView():
 
         self.canvas = Canvas(master, width=500, height=500)
 
-        self.image = self.canvas.create_image(10, 10, anchor=tk.NW, image=None)
+        self.image = self.canvas.create_image(0, 0, anchor=tk.NW, image=None) # 10, 10 instead for better centering
 
         self.canvas.bind('<1>', self.select_circle)
         self.canvas.bind('<Shift-1>', self.make_circle)
