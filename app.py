@@ -22,6 +22,13 @@ CW = 90
 CCW = -90
 SHARE_NAME = "pv-segment-training"
 SAVE_FOLDER = "processed"
+CONFIG = {
+    "listInspectionsUrl": "https://cea-pdc-api.azurewebsites.net/api/getannotatedinspections/",
+    "getInspectionUrl": "https://cea-pdc-api.azurewebsites.net/api/readannotatedinspectionbatch/",
+    "defectAPIKey": "5LNTTJ38S940LNCHHGUR2DDKEM6T8DYZ",
+    "azureAccountName": "pvsegmentstorage",
+    "azureAccountKey": "zsuyLFH+e/FL+wriyPT1Bp57xNpAk8ZgHyM9ifvpgvCH0nOTjTCoaw6CTtriH4EngDT+XFmkakEYqRlkj+JDvw=="
+}
 
 default_image = "assets/default_img.png"
 
@@ -136,9 +143,13 @@ class App():
         self.root.bind('<N>', self.new_segmentation)
         self.root.bind('<Tab>', self.persp_image.next_index)
 
-        f = open('config.json', 'r')
-        c = json.loads(f.read())
-        f.close()
+        try:
+            f = open('config.json', 'r')
+            c = json.loads(f.read())
+            f.close()
+        except:
+            c = CONFIG
+            
         self.connection_string = "DefaultEndpointsProtocol=https;AccountName=" + c['azureAccountName'] + \
             ";AccountKey=" + c['azureAccountKey'] + \
             ";EndpointSuffix=core.windows.net"
