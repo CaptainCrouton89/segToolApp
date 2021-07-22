@@ -2,11 +2,12 @@ from pathlib import Path
 from datetime import date, datetime
 import json
 from shapely.geometry import Polygon
-from azure.storage.fileshare import ShareClient, ShareFileClient, ShareDirectoryClient
+from azure.storage.fileshare import ShareFileClient, ShareDirectoryClient
 from PIL import Image, ImageTk
-from warpTools import four_point_transform
-import cornerDetectionTools
-from cvTools import *
+from tools.warpTools import four_point_transform
+import tools.cornerDetectionTools
+from tools.cvTools import *
+import tools.cocoConfig
 from tkinter import filedialog, Canvas, Frame
 from tkinter.messagebox import showinfo
 import tkinter as tk
@@ -15,11 +16,12 @@ import os
 import cv2
 import numpy as np
 import argparse
-import cocoConfig
+
 
 CW = 90
 CCW = -90
 SHARE_NAME = "pv-segment-training"
+SAVE_FOLDER = "processed"
 
 default_image = "assets/default_img.png"
 
@@ -121,7 +123,7 @@ class App():
         self.root.bind('<Return>', self.set_dims)
         self.root.bind('<x>', self.switch_dims)
         self.root.bind('<Control-r>', self.recalculate_corners)
-        self.root.bind('<f>', self._next_frame)
+        self.root.bind('<f>', self.next)
         self.root.bind('<d>', self._prev_frame)
         self.root.bind('<Right>', self.increase_width)
         self.root.bind('<Left>', self.decrease_width)
@@ -231,7 +233,7 @@ class App():
         bt_skip = tk.Button(navbar, text="Skip", command=self.skip, takefocus=0, fg="black")
         bt_skip.grid(row=1, column=4, sticky=("nsew"))
         
-        bt_next = tk.Button(navbar, text="Next", command=self._next_frame, takefocus=0, fg="black")
+        bt_next = tk.Button(navbar, text="Next", command=self.next, takefocus=0, fg="black")
         bt_next.grid(row=1, column=5, sticky=("nsew"))
 
         bt_prev = tk.Button(navbar, text="Previous", command=self._prev_frame, takefocus=0, fg="black")
@@ -285,25 +287,27 @@ class App():
         self.index = -1
 
         if not self.default_in_folder:
-            self.folder = filedialog.askdirectory(initialdir=".")
+            self.folder = Path(filedialog.askdirectory(initialdir="."))
         else:
-            self.folder = self.default_in_folder
-        in_path = Path(self.folder)
+            self.folder = Path(self.default_in_folder)
+        try:
+            os.mkdir(str(self.folder / SAVE_FOLDER))
+        except:
+            if self.verbosity > 0:
+                print("Output folder already exists.")
         for filename in os.listdir(self.folder):
             if filename.endswith(".jpg") or filename.endswith(".png"):
-                filepath = str(in_path / filename)
-                self.all_images.append(ImageLoad(filepath, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity)) # Have to multiply by weird constant in order make image fit nicely. No idea why.
+                self.all_images.append(ImageLoad(self.folder, filename, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity)) # Have to multiply by weird constant in order make image fit nicely. No idea why.
         if self.verbosity > 0:
             for i in self.all_images:
-                print(i.path)
+                print(i.name)
         
         self._next_frame()
 
     def save_and_upload(self, event=None):
         timestamp = datetime.today().strftime("%Y-%m-%d-%H-%M-%S")
-        annotation_path = self.save_to()
+        self.save_to()
         showinfo("Uploading", "Beginning upload to fileshare. This could take a while.")
-        in_path = Path(self.folder)
         print("Uploading to:" + "output-from-segmentation/" + timestamp + "/annotations.json")
 
         try:
@@ -314,7 +318,8 @@ class App():
             print("Directory failure")
 
         try:
-            with open(annotation_path + "/annotations.json", "r+") as a:
+            an_path = str(self.folder / SAVE_FOLDER / "annotations.json")
+            with open(an_path, "r+") as a:
                 file_client = ShareFileClient.from_connection_string(
                     self.connection_string, SHARE_NAME, file_path="output-from-segmentation/" + timestamp + "/annotations.json")
                 file_client.upload_file(a.read())
@@ -323,11 +328,11 @@ class App():
 
         try:
             # Iterate through image directory
-            for filename in os.listdir(self.folder):
+            for filename in os.listdir(str(self.folder / SAVE_FOLDER)):
                 # tk.update_idletasks()
                 if filename.endswith(".jpg") or filename.endswith(".png"): 
                     print("uploaded " + filename)
-                    filepath = str(in_path / filename)
+                    filepath = str(self.folder / SAVE_FOLDER / filename)
                     with open(filepath, "rb") as fp:
                         file_client = ShareFileClient.from_connection_string(
                             self.connection_string, SHARE_NAME, "output-from-segmentation/" + timestamp + "/" + filename)
@@ -340,10 +345,11 @@ class App():
 
     def save_to(self, event=None):
         # folder = filedialog.askdirectory(initialdir=".")
-        coco = cocoConfig.get_boiler()
+        coco = tools.cocoConfig.get_boiler()
         datetime = str(date.today())
 
-        save_path = filedialog.askdirectory(initialdir=".")
+        # save_path = filedialog.askdirectory(initialdir=".")
+        # path = str(Path(save_path) / "annotations.json")
         
         id = 0
         an_id = 0
@@ -355,7 +361,7 @@ class App():
                         "id": id,
                         "width": image_load.width,
                         "height": image_load.height,
-                        "file_name": image_load.path,
+                        "file_name": image_load.name,
                         "license": coco["licenses"]["id"],
                         "flickr_url": "",
                         "coco_url": "",
@@ -379,14 +385,20 @@ class App():
                                 "iscrowd": 0
                             }
                         )
-        path = str(Path(save_path) / "annotations.json")
-        f = open(path, "w+")
+        an_path = str(self.folder / SAVE_FOLDER / "annotations.json")
+        f = open(an_path, "w+")
         json.dump(coco, f)
-        showinfo("Saved", "Images have been saved to " + path +".")
-        return save_path
+        showinfo("Saved", "Images have been saved to " + an_path +".")
+
+    def next(self, event=None):
+        try:
+            self.persp_image.image_load.skip = False
+            print(self.persp_image.image_load.skip)
+        except:
+            print("still skipped :(")
+        self._next_frame()
 
     def _next_frame(self, event=None):
-        
         if self.verbosity > 2:
             print("next")
         if not self.all_images:
@@ -408,9 +420,10 @@ class App():
         self._change_frame()
 
     def _change_frame(self):
+        self.persp_image.seg_index = 0
         image_load = self.all_images[self.index]
         self.persp_image.set_image(image_load)
-        self.name.config(text=self.persp_image.image_load.path)
+        self.name.config(text=self.persp_image.image_load.name)
         self.refresh()
 
     def refresh(self):
@@ -420,7 +433,6 @@ class App():
 
     def skip(self, event=None):
         self.persp_image.image_load.skip = True
-        self.persp_image.seg_index = 0
         self._next_frame()
 
     def set_dims(self, event=None):
@@ -499,7 +511,7 @@ class Segmentation():
 
 class ImageLoad():
 
-    def __init__(self, path, resize, verbosity=0):
+    def __init__(self, folder, name, resize, verbosity=0):
         self.skip = True
 
         self.verbosity = verbosity
@@ -509,8 +521,10 @@ class ImageLoad():
         self.x_cells = 6
         self.y_cells = 10
 
-        self.path = path
-        self.cv_image = cv2.imread(path)
+        self.folder = folder
+        self.name = name
+        in_path = str(folder / name)
+        self.cv_image = cv2.imread(in_path)
 
         ht, wd, cc= self.cv_image.shape
         ww = wd+80
@@ -520,11 +534,12 @@ class ImageLoad():
         xx = (ww - wd) // 2
         yy = (hh - ht) // 2
 
-        # copy img image into center of result image
         new_img[yy:yy+ht, xx:xx+wd] = self.cv_image
         self.cv_image = new_img
+        out_path = folder / SAVE_FOLDER / self.name
+        cv2.imwrite(str(out_path), self.cv_image)
 
-        self.o_pil_image = Image.open(path)
+        self.o_pil_image = Image.open(in_path)
         self.pil_image = self.o_pil_image.resize((resize[0], resize[1]))
         self.tk_image = ImageTk.PhotoImage(self.pil_image)
 
@@ -565,7 +580,7 @@ class ImageLoad():
     def auto_detect(self):
         if self.verbosity > 1:
             print("auto-detecting corners")
-        corners = cornerDetectionTools.find_corners(self.cv_image)
+        corners = tools.cornerDetectionTools.find_corners(self.cv_image)
         adjusted_corners = self.convert_points_forward(*corners)
         return corners, adjusted_corners
 
@@ -579,7 +594,6 @@ class ImageLoad():
             seg.corners, seg.adjusted_corners = self.auto_detect()
     
         persp_img = self.cv_image.copy()
-        self.skip = False
         for seg in self.segmentations:
             if self.verbosity > 1:
                 print("adjusted corners:", seg.adjusted_corners)
