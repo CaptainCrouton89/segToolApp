@@ -8,6 +8,7 @@ from tools.warpTools import four_point_transform
 import tools.cornerDetectionTools
 from tools.cvTools import *
 import tools.cocoConfig
+from tools.cocoAnnotation import CocoDataset
 from tkinter import filedialog, Canvas, Frame
 from tkinter.messagebox import showinfo
 import tkinter as tk
@@ -16,7 +17,7 @@ import os
 import cv2
 import numpy as np
 import argparse
-
+from IPython.core.display import display, HTML
 
 CW = 90
 CCW = -90
@@ -392,14 +393,21 @@ class App():
                                 "category_id": coco["categories"][0]["id"],
                                 "segmentation": [[item for items in segmentation for item in items]],
                                 "area": polygon.area,
-                                "bbox": [bbox[0][0],bbox[0][0],bbox[1][0]-bbox[0][0],bbox[1][1]-bbox[0][1]],
+                                "bbox": [bbox[0][0],bbox[0][1],bbox[1][0]-bbox[0][0],bbox[1][1]-bbox[0][1]],
                                 "iscrowd": 0
                             }
                         )
         an_path = str(self.folder / SAVE_FOLDER / "annotations.json")
         f = open(an_path, "w+")
         json.dump(coco, f)
+        f.close()
         showinfo("Saved", "Images have been saved to " + an_path +".")
+
+        print(an_path, str(self.folder / SAVE_FOLDER)) 
+
+        ds = CocoDataset(an_path, str(self.folder / SAVE_FOLDER))
+        html = ds.display_image(1, use_url=False)
+        display(HTML(html))
 
     def next(self, event=None):
         try:
