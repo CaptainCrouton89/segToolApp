@@ -26,6 +26,9 @@ def find_intersection(x1,y1,x2,y2,x3,y3,x4,y4):
     return px, py
 
 def bounding_box(points):
+    print("points:", points)
     x_coordinates, y_coordinates = zip(*points)
-
-    return [(min(x_coordinates), min(y_coordinates)), (max(x_coordinates), max(y_coordinates))]
+    print("Xcoords, y coords:", x_coordinates, y_coordinates)
+    coords = [(min(x_coordinates), min(y_coordinates)), (max(x_coordinates), max(y_coordinates))]
+    print("Coords:", coords)
+    return coords
