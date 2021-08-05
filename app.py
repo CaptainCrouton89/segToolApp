@@ -53,12 +53,12 @@ keybinds = "\n\
     \n\tReset                   <Control-r> \
     \n\tSet dimensions          <Return> \
     \n\tSwitch dimensions       <x> \
-    \n\tIncrease rows           <Right> \
-    \n\tDecrease rows           <Left> \
+    \n\tIncrease rows           <Left> \
+    \n\tDecrease rows           <Right> \
     \n\tIncrease columns        <Up> \
     \n\tDecrease columns        <Down> \
     \n\tNew segmentation        <Shift-n> \
-    \n\tSwitch segmentations    <Tab> \
+    \n\tSwitch segmentations    <]> \
     \n\n"
 
 instructions = "\
@@ -85,7 +85,7 @@ instructions = "\
     \n\twantto add more points, make sure you are on the correct \
     \n\tsegmentation grid, as indicated by the number in the top right, to \
     \n\tthe right of the 'Recalculate' button. You can switch which grid \
-    \n\tyou are adding points to by hitting <Tab>.\
+    \n\tyou are adding points to by hitting <]>.\
     \n\
     \n\tIf you mess up, and would like to start over at any time, you can \
     \n\thit 'Recalculate' (<Control-r>) and it will reset. \
@@ -125,7 +125,9 @@ class App():
     def __init__(self, name, verbosity=0, in_folder=None):
         self.default_in_folder = in_folder
 
-        self.verbosity = verbosity        
+        self.verbosity = verbosity  
+        self._total = 0
+        self.index = 0      
 
         self.root = self.draw_window(name)
         self.root.bind('<Return>', self.set_dims)
@@ -133,16 +135,16 @@ class App():
         self.root.bind('<Control-r>', self.recalculate_corners)
         self.root.bind('<f>', self.next)
         self.root.bind('<d>', self._prev_frame)
-        self.root.bind('<Right>', self.increase_width)
-        self.root.bind('<Left>', self.decrease_width)
-        self.root.bind('<Up>', self.increase_height)
-        self.root.bind('<Down>', self.decrease_height)
+        self.root.bind('<Up>', self.increase_width)
+        self.root.bind('<Down>', self.decrease_width)
+        self.root.bind('<Right>', self.increase_height)
+        self.root.bind('<Left>', self.decrease_height)
         self.root.bind('<Control-o>', self.load_images)
         self.root.bind('<Control-s>', self.save_to)
         self.root.bind('<Control-S>', self.save_and_upload)
         self.root.bind('<K>', self.skip)
         self.root.bind('<N>', self.new_segmentation)
-        self.root.bind('<Tab>', self.persp_image.next_index)
+        self.root.bind('<]>', self.persp_image.next_index)
 
         try:
             f = open('config.json', 'r')
@@ -261,13 +263,13 @@ class App():
         controls_frame = tk.Frame(master=editor_frame)
         controls_frame.pack(side=tk.TOP, fill="x")
 
-        self.pv_width = tk.Entry(master=controls_frame, width=3, fg="black", bg="white", takefocus=0)
-        self.pv_height = tk.Entry(master=controls_frame, width=3, fg="black", bg="white", takefocus=0)
+        self.pv_width = tk.Entry(master=controls_frame, width=3, fg="black", bg="white", takefocus=1)
+        self.pv_height = tk.Entry(master=controls_frame, width=3, fg="black", bg="white", takefocus=1)
         self.bt_setdim = tk.Button(master=controls_frame, text="Confirm dimensions", command=self.set_dims, fg="black")
         self.bt_switchdim = tk.Button(master=controls_frame, text="Switch dimensions", command=self.switch_dims, fg="black")
         bt_recal_corners = tk.Button(controls_frame, text="Recalculate",command=self.recalculate_corners, fg="black")
+        bt_newseg_corners = tk.Button(controls_frame, text="New Segmentation",command=self.new_segmentation, fg="black")
         self.lb_seg_index = tk.Label(controls_frame, text="Segmentation: 1", fg="black", takefocus=0)
-
 
         self.pv_width.delete(0, 'end')
         self.pv_height.delete(0, 'end')
@@ -279,7 +281,7 @@ class App():
         self.bt_setdim.pack(side=tk.LEFT)
         self.bt_switchdim.pack(side=tk.LEFT)
         bt_recal_corners.pack(side=tk.LEFT)
-        
+        bt_newseg_corners.pack(side=tk.LEFT)
         self.lb_seg_index.pack(side=tk.LEFT)
 
         self.draw_image_frames(editor_frame)
@@ -309,11 +311,12 @@ class App():
                 print("Output folder already exists.")
         for filename in os.listdir(self.folder):
             if filename.endswith(".jpg") or filename.endswith(".png"):
-                self.all_images.append(ImageLoad(self.folder, filename, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity)) # Have to multiply by weird constant in order make image fit nicely. No idea why.
+                self.all_images.append(ImageLoad(self.persp_image, self.folder, filename, resize=(int(.99 * w), int(.975 * h)), verbosity=self.verbosity)) # Have to multiply by weird constant in order make image fit nicely. No idea why.
         if self.verbosity > 0:
             for i in self.all_images:
                 print(i.name)
         
+        self._total = len(self.all_images)
         self._next_frame()
 
     def save_and_upload(self, event=None):
@@ -403,12 +406,6 @@ class App():
         f.close()
         showinfo("Saved", "Images have been saved to " + an_path +".")
 
-        print(an_path, str(self.folder / SAVE_FOLDER)) 
-
-        ds = CocoDataset(an_path, str(self.folder / SAVE_FOLDER))
-        html = ds.display_image(1, use_url=False)
-        display(HTML(html))
-
     def next(self, event=None):
         try:
             self.persp_image.image_load.skip = False
@@ -442,24 +439,38 @@ class App():
         self.persp_image.seg_index = 0
         image_load = self.all_images[self.index]
         self.persp_image.set_image(image_load)
-        self.name.config(text=self.persp_image.image_load.name)
+        self.name.config(text=self.persp_image.image_load.name + " ({}/{})".format(self.index+1, self._total))
         self.refresh()
+        self.persp_image.next_index()
+        # if self.persp_image.image_load.skip == True:
+        #     self.recalculate_corners()
 
     def refresh(self):
         self.persp_image.clear_all()
         self.persp_image.image_load.refresh()
         self.persp_image.refresh()
 
+    def recalculate_corners(self, event=None):
+        img_load = self.persp_image.image_load
+        self.persp_image.reset()
+        img_load.segmentations[0].corners, img_load.segmentations[0].adjusted_corners = self.persp_image.image_load.auto_detect()
+        self.refresh()
+
     def skip(self, event=None):
         self.persp_image.image_load.skip = True
         self._next_frame()
 
     def set_dims(self, event=None):
+        self._set_dims()
+        self.bt_setdim.focus()
+
+    def _set_dims(self, refresh=True):
         self.persp_image.image_load.segmentations[self.persp_image.seg_index].x_cells = int(self.pv_width.get())
         self.persp_image.image_load.segmentations[self.persp_image.seg_index].y_cells = int(self.pv_height.get())
         if self.verbosity > 1:
             print("width:", self.pv_width.get(), "\nheight:", self.pv_height.get())
-        self.refresh()
+        if refresh:
+            self.refresh()
 
     def switch_dims(self, event=None):
         h = int(self.pv_height.get())
@@ -469,12 +480,6 @@ class App():
         self.pv_width.insert(tk.END, h)
         self.pv_height.insert(tk.END, w)
         self.set_dims()
-
-    def recalculate_corners(self, event=None):
-        img_load = self.persp_image.image_load
-        self.persp_image.reset()
-        img_load.segmentations[0].corners, img_load.segmentations[0].adjusted_corners = self.persp_image.image_load.auto_detect()
-        self.refresh()
 
     def new_segmentation(self, event=None):
         self.persp_image.new_segmentation()
@@ -530,8 +535,9 @@ class Segmentation():
 
 class ImageLoad():
 
-    def __init__(self, folder, name, resize, verbosity=0):
+    def __init__(self, view, folder, name, resize, verbosity=0):
         self.skip = True
+        self.view = view
 
         self.verbosity = verbosity
         self.resize = resize
@@ -611,6 +617,7 @@ class ImageLoad():
         seg = self.segmentations[0]
         if seg.corners.shape[0] == 0 and seg.adjusted_corners.shape[0] == 0:
             seg.corners, seg.adjusted_corners = self.auto_detect()
+            # self.view.app.recalculate_corners()
     
         persp_img = self.cv_image.copy()
         for seg in self.segmentations:
@@ -630,7 +637,7 @@ class ImageLoad():
                                 or press <Control-k> to skip this image.")
                     if corner_count % 4 == 0:
                         print("Hint: Did you forget to create a new segmentation? Press recalculate and then \
-                                <Control-n> to create a new segmentation. You can press <Tab> to switch between \
+                                <Control-n> to create a new segmentation. You can press <]> to switch between \
                                 them.")
                 self.skip = True
                 persp_img = self.cv_image
@@ -751,7 +758,7 @@ class PerspectiveView():
         self.next_index()
 
     def next_index(self, event=None):
-        max_index = len(self.indicators)
+        max_index = len(self.image_load.segmentations)
         self.seg_index += 1
         if self.seg_index >= max_index:
             self.seg_index = 0
