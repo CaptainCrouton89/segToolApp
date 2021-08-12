@@ -39,10 +39,10 @@ All images are, by default, marked as "to skip". It is only by hitting the next 
 
 To save your segmentations, you have two options: ```Save```, and ```Save + Export```. ```Save``` will save all of the images to another folder, inside the original image folder. Within that folder will be all of the images, along with a file called ```annotations.json```. This is where all of the COCO formatted segmentation data is stored.
 
-```Save + Export``` has the same functionality as ```Save```, except it also uploads it to the cloud. *This is the option you should choose* unless you are testing the application, or are not working for Clean Energy Associates. 
+```Save + Export``` has the same functionality as ```Save```, except it also uploads it to the cloud. *This is the option you should choose* **unless** you are testing the application, or are not working for Clean Energy Associates.
 
 
 ## SPECS
-* File size
+* File size: ~340 MB
 * Generates COCO format .json file
-* Exports to ```pv-storage/pvSegmentationTraining/segmentation-output/<date in yyyy-mm-dd-hh-mm-ss format>/```
+* Exports to ```pvsegmentstorage/File Shares/pv-segment-training/output-from-segmentation/<date in yyyy-mm-dd-hh-mm-ss format>/```
